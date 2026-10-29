@@ -113,11 +113,14 @@
      ========================================================================== */
   const Storage = {
     getCloudConfig() {
-      try {
-        return JSON.parse(localStorage.getItem(LOCAL_STORAGE_CLOUD)) || null;
-      } catch (e) {
-        return null;
+      if (window.SUBINOVA_CLOUD_CONFIG && window.SUBINOVA_CLOUD_CONFIG.url && window.SUBINOVA_CLOUD_CONFIG.key) {
+        return window.SUBINOVA_CLOUD_CONFIG;
       }
+      try {
+        const local = JSON.parse(localStorage.getItem(LOCAL_STORAGE_CLOUD));
+        if (local && local.url && local.key) return local;
+      } catch (e) {}
+      return null;
     },
 
     setCloudConfig(cfg) {
