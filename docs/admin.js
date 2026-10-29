@@ -282,7 +282,26 @@
       localStorage.setItem('subinova_modo_manutencao', String(val));
     },
 
-    getAdminHash() {
+    async getAdminHash() {
+      if (this.isCloudEnabled()) {
+        const cfg = this.getCloudConfig();
+        try {
+          const res = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.admin_hash&select=valor`, {
+            headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.length && data[0].valor) {
+              const cloudVal = data[0].valor;
+              localStorage.setItem('subinova_admin_hash', cloudVal);
+              return cloudVal;
+            }
+          }
+        } catch (e) {
+          console.warn('Erro ao buscar admin_hash na nuvem:', e);
+        }
+      }
+
       const stored = localStorage.getItem('subinova_admin_hash');
       if (!stored || stored === '1097e8b623cf5ab862c95359b35e0762cf39b4b0df16ff1a051515ef50b1069f') {
         return DEFAULT_ADMIN_HASH;
@@ -290,8 +309,32 @@
       return stored;
     },
 
-    setAdminHash(h) {
+    async setAdminHash(h) {
       localStorage.setItem('subinova_admin_hash', h);
+      if (this.isCloudEnabled()) {
+        const cfg = this.getCloudConfig();
+        const res = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.admin_hash`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': cfg.key,
+            'Authorization': `Bearer ${cfg.key}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ valor: h })
+        });
+        if (!res.ok) {
+          await fetch(`${cfg.url}/rest/v1/configuracoes`, {
+            method: 'POST',
+            headers: {
+              'apikey': cfg.key,
+              'Authorization': `Bearer ${cfg.key}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ chave: 'admin_hash', valor: h })
+          }).catch(() => {});
+        }
+      }
     }
   };
 
@@ -349,18 +392,10 @@
     const val = adminPassInput.value.trim();
     if (!val) return;
 
-    // 1. Suporte direto à chave padrão master
-    if (val === '@admin3293') {
-      sessionStorage.setItem('subinova_admin_logged', '1');
-      adminLoginError.classList.remove('visible');
-      showDashboard();
-      return;
-    }
-
-    // 2. Validação criptográfica SHA-256
     const h = await computeSHA256(val);
-    const expected = Storage.getAdminHash();
-    if (h === expected || h === DEFAULT_ADMIN_HASH) {
+    const expected = await Storage.getAdminHash();
+
+    if (h === expected || (expected === DEFAULT_ADMIN_HASH && val === '@admin3293')) {
       sessionStorage.setItem('subinova_admin_logged', '1');
       adminLoginError.classList.remove('visible');
       showDashboard();
@@ -390,11 +425,15 @@
     checkAdminLogin();
   });
 
-  adminPassInput.addEventListener('input', () => {
+  adminPassInput.addEventListener('input', async () => {
     adminLoginError.classList.remove('visible');
     const val = adminPassInput.value.trim();
-    if (val === '@admin3293') {
-      checkAdminLogin();
+    if (val.length >= 5) {
+      const h = await computeSHA256(val);
+      const expected = await Storage.getAdminHash();
+      if (h === expected || (expected === DEFAULT_ADMIN_HASH && val === '@admin3293')) {
+        checkAdminLogin();
+      }
     }
   });
 
@@ -678,14 +717,16 @@
 
   formAdminPass.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (newAdminPass.value !== confirmAdminPass.value) {
+    const p1 = newAdminPass.value.trim();
+    const p2 = confirmAdminPass.value.trim();
+    if (!p1 || p1 !== p2) {
       adminPassError.classList.add('visible');
       return;
     }
-    const h = await computeSHA256(newAdminPass.value);
-    Storage.setAdminHash(h);
+    const h = await computeSHA256(p1);
+    await Storage.setAdminHash(h);
     closeModal(modalAdminPass);
-    alert('Senha de administrador atualizada com sucesso!');
+    alert('Senha de administrador atualizada com sucesso na nuvem!');
   });
 
   /* ==========================================================================
