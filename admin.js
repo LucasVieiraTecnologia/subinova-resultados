@@ -6,6 +6,7 @@
   const LOCAL_STORAGE_KEYS = 'subinova_chaves_acesso';
   const LOCAL_STORAGE_CONFIG = 'subinova_portal_config';
   const LOCAL_STORAGE_CLOUD = 'subinova_cloud_config';
+  const LOCAL_STORAGE_LOGS = 'subinova_logs_acesso';
 
   // Chaves iniciais padrão se não houver nada no banco/localStorage
   const INITIAL_KEYS = [
@@ -15,6 +16,8 @@
       chave_hash: '0257caf28e46a4c150cad95f28fa4bf0d2c2183d2eb2ad61be1d76d35136ca24',
       rotulo: 'Chave Geral Padrão',
       ativa: true,
+      expira_em: null,
+      limite_usos: null,
       criada_em: new Date().toISOString(),
       ultimo_acesso: null,
       total_usos: 0
@@ -78,7 +81,7 @@
         var s1 = rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25);
         var t1 = (h + s1 + ch + k[j] + w[j]) >>> 0;
         var t2 = (s0 + maj) >>> 0;
-        h = g; g = f; f = e; e = (d + t1) >>> 0;
+        h = g; f = e; e = (d + t1) >>> 0;
         d = c; c = b; b = a; a = (t1 + t2) >>> 0;
       }
       hash[0] = (hash[0] + a) >>> 0; hash[1] = (hash[1] + b) >>> 0;
@@ -173,9 +176,10 @@
           chave_hash: item.chave_hash,
           rotulo: item.rotulo,
           ativa: Boolean(item.ativa),
+          expira_em: item.expira_em || null,
+          limite_usos: item.limite_usos ? Number(item.limite_usos) : null,
           total_usos: Number(item.total_usos || 0)
         };
-        // Se id for UUID válido, envia; caso contrário o Supabase gera com gen_random_uuid()
         if (item.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id)) {
           payload.id = item.id;
         }
@@ -335,6 +339,82 @@
           }).catch(() => {});
         }
       }
+    },
+
+    async fetchLogs() {
+      if (this.isCloudEnabled()) {
+        const cfg = this.getCloudConfig();
+        try {
+          const res = await fetch(`${cfg.url}/rest/v1/logs_acesso?select=*&order=criado_em.desc&limit=250`, {
+            headers: {
+              'apikey': cfg.key,
+              'Authorization': `Bearer ${cfg.key}`
+            }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            return data;
+          }
+        } catch (e) {
+          console.warn('Erro ao buscar logs da nuvem:', e);
+        }
+      }
+
+      try {
+        const local = JSON.parse(localStorage.getItem(LOCAL_STORAGE_LOGS));
+        if (Array.isArray(local)) return local;
+      } catch (e) {}
+      return [];
+    },
+
+    async getBannerConfig() {
+      if (this.isCloudEnabled()) {
+        const cfg = this.getCloudConfig();
+        try {
+          const res = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=in.(banner_ativo,banner_mensagem)&select=chave,valor`, {
+            headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            let ativo = false;
+            let mensagem = '';
+            data.forEach(item => {
+              if (item.chave === 'banner_ativo') ativo = item.valor === 'true';
+              if (item.chave === 'banner_mensagem') mensagem = item.valor || '';
+            });
+            return { ativo, mensagem };
+          }
+        } catch (e) {}
+      }
+
+      return {
+        ativo: localStorage.getItem('subinova_banner_ativo') === 'true',
+        mensagem: localStorage.getItem('subinova_banner_msg') || ''
+      };
+    },
+
+    async setBannerConfig(ativo, mensagem) {
+      localStorage.setItem('subinova_banner_ativo', String(ativo));
+      localStorage.setItem('subinova_banner_msg', mensagem);
+
+      if (this.isCloudEnabled()) {
+        const cfg = this.getCloudConfig();
+        const payload = [
+          { chave: 'banner_ativo', valor: String(ativo) },
+          { chave: 'banner_mensagem', valor: mensagem }
+        ];
+
+        await fetch(`${cfg.url}/rest/v1/configuracoes`, {
+          method: 'POST',
+          headers: {
+            'apikey': cfg.key,
+            'Authorization': `Bearer ${cfg.key}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify(payload)
+        }).catch(() => {});
+      }
     }
   };
 
@@ -352,6 +432,12 @@
   const syncBadge = document.getElementById('sync-status-badge');
   const syncText = document.getElementById('sync-status-text');
 
+  // Abas
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  const tabPanes = document.querySelectorAll('.tab-pane');
+  const tabLogsBadge = document.getElementById('tab-logs-badge');
+
+  // Aba 1: Chaves
   const kpiTotal = document.getElementById('kpi-total-keys');
   const kpiActive = document.getElementById('kpi-active-keys');
   const kpiBlocked = document.getElementById('kpi-blocked-keys');
@@ -363,11 +449,38 @@
   const btnOpenCloud = document.getElementById('btn-open-cloud-config');
   const btnOpenAdminPass = document.getElementById('btn-open-change-admin-pass');
 
+  // Aba 2: Logs
+  const logSearchInput = document.getElementById('log-search-input');
+  const logFilterStatus = document.getElementById('log-filter-status');
+  const btnExportCsv = document.getElementById('btn-export-csv');
+  const btnRefreshLogs = document.getElementById('btn-refresh-logs');
+  const logsTableBody = document.getElementById('logs-table-body');
+  let currentLogsCache = [];
+
+  // Aba 3: Analytics
+  const analyticsTotal = document.getElementById('analytics-total-count');
+  const analyticsRate = document.getElementById('analytics-success-rate');
+  const analyticsCities = document.getElementById('analytics-cities-count');
+  const analyticsFailed = document.getElementById('analytics-failed-count');
+  const chartDailyBars = document.getElementById('chart-daily-bars');
+  const chartTopCities = document.getElementById('chart-top-cities');
+  const chartDevicesList = document.getElementById('chart-devices-list');
+  const chartTopKeys = document.getElementById('chart-top-keys');
+
+  // Aba 4: Banner
+  const chkBannerActive = document.getElementById('chk-banner-active');
+  const bannerMessageInput = document.getElementById('banner-message-input');
+  const bannerLivePreview = document.getElementById('banner-live-preview');
+  const bannerPreviewText = document.getElementById('banner-preview-text');
+  const formBanner = document.getElementById('form-banner');
+
   // Modais
   const modalKey = document.getElementById('modal-key');
   const formKey = document.getElementById('form-key');
   const keyInputVal = document.getElementById('key-input-val');
   const keyInputLabel = document.getElementById('key-input-label');
+  const keyInputExpire = document.getElementById('key-input-expire');
+  const keyInputMaxUses = document.getElementById('key-input-max-uses');
   const keyInputActive = document.getElementById('key-input-active');
   const btnGenerateKey = document.getElementById('btn-generate-key');
 
@@ -384,6 +497,32 @@
   const newAdminPass = document.getElementById('new-admin-pass');
   const confirmAdminPass = document.getElementById('confirm-admin-pass');
   const adminPassError = document.getElementById('admin-pass-error');
+
+  /* ==========================================================================
+     CONTROLE DE NAVEGAÇÃO POR ABAS
+     ========================================================================== */
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetTab = btn.getAttribute('data-tab');
+      
+      tabBtns.forEach(b => b.classList.remove('active'));
+      tabPanes.forEach(p => p.classList.add('hidden'));
+
+      btn.classList.add('active');
+      const activePane = document.getElementById(targetTab);
+      if (activePane) activePane.classList.remove('hidden');
+
+      if (targetTab === 'tab-logs') {
+        renderLogsView();
+      } else if (targetTab === 'tab-analytics') {
+        renderAnalyticsView();
+      } else if (targetTab === 'tab-banner') {
+        renderBannerView();
+      } else {
+        renderDashboard();
+      }
+    });
+  });
 
   /* ==========================================================================
      AUTENTICAÇÃO DO ADMINISTRADOR
@@ -410,6 +549,11 @@
     dashScreen.classList.remove('hidden');
     updateCloudStatusUI();
     renderDashboard();
+    // Pré-carrega logs em segundo plano para badges
+    Storage.fetchLogs().then(logs => {
+      currentLogsCache = logs;
+      if (tabLogsBadge) tabLogsBadge.textContent = logs.length;
+    });
   }
 
   function logout() {
@@ -445,7 +589,7 @@
   btnAdminLogout.addEventListener('click', logout);
 
   /* ==========================================================================
-     RENDERIZAÇÃO DO DASHBOARD
+     ABA 1: DASHBOARD & CHAVES
      ========================================================================== */
   function updateCloudStatusUI() {
     if (Storage.isCloudEnabled()) {
@@ -488,17 +632,45 @@
       kpiMaintenance.classList.remove('active-maintenance');
     }
 
-    // Renderiza Tabela
+    // Renderiza Tabela de Chaves
     keysTableBody.innerHTML = '';
     if (keys.length === 0) {
-      keysTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:#64748b;">Nenhuma chave cadastrada. Clique em "Criar Nova Chave" para começar.</td></tr>`;
+      keysTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b;">Nenhuma chave cadastrada. Clique em "Criar Nova Chave" para começar.</td></tr>`;
       return;
     }
+
+    const now = new Date();
 
     keys.forEach((k) => {
       const tr = document.createElement('tr');
       const maskVal = '••••••••';
       const realVal = k.chave;
+
+      // Validação de expiração ou limite
+      let isExpired = false;
+      let isLimitReached = false;
+      let validityHtml = '<span style="color:#64748b; font-size:11.5px;">Vitalícia / Ilimitada</span>';
+
+      if (k.expira_em) {
+        const expDate = new Date(k.expira_em);
+        if (expDate < now) {
+          isExpired = true;
+          validityHtml = `<span class="status-pill failed" style="font-size:10.5px;">Expirou ${expDate.toLocaleDateString('pt-BR')}</span>`;
+        } else {
+          validityHtml = `<span style="color:#cbd5e1; font-size:11.5px;">Até ${expDate.toLocaleDateString('pt-BR')} ${expDate.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>`;
+        }
+      }
+
+      if (k.limite_usos && k.limite_usos > 0) {
+        if ((k.total_usos || 0) >= k.limite_usos) {
+          isLimitReached = true;
+          validityHtml += `<br><span class="status-pill failed" style="font-size:10.5px; margin-top:2px;">Limite Atingido (${k.total_usos}/${k.limite_usos})</span>`;
+        } else {
+          validityHtml += `<br><span style="color:#94a3b8; font-size:11px;">${k.total_usos || 0} de ${k.limite_usos} usos</span>`;
+        }
+      }
+
+      const effectiveActive = k.ativa && !isExpired && !isLimitReached;
 
       tr.innerHTML = `
         <td>
@@ -511,12 +683,13 @@
         </td>
         <td><b class="key-label-text">${k.rotulo || 'Sem identificador'}</b></td>
         <td style="color:#94a3b8; font-size:12px;">${formatDate(k.criada_em)}</td>
+        <td>${validityHtml}</td>
         <td style="color:#94a3b8; font-size:12px;">${formatDate(k.ultimo_acesso)}</td>
         <td><span style="font-weight:600; color:#38bdf8;">${k.total_usos || 0}</span></td>
         <td>
-          <span class="status-pill ${k.ativa ? 'active' : 'blocked'}">
+          <span class="status-pill ${effectiveActive ? 'active' : 'blocked'}">
             <span style="width:6px;height:6px;border-radius:50%;background:currentColor;"></span>
-            ${k.ativa ? 'Ativa' : 'Bloqueada'}
+            ${effectiveActive ? 'Ativa' : (isExpired ? 'Expirada' : (isLimitReached ? 'Esgotada' : 'Bloqueada'))}
           </span>
         </td>
         <td>
@@ -593,6 +766,326 @@
   });
 
   /* ==========================================================================
+     ABA 2: AUDITORIA DE LOGS & IPS
+     ========================================================================== */
+  async function renderLogsView() {
+    logsTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b;">Carregando logs de auditoria...</td></tr>`;
+    const logs = await Storage.fetchLogs();
+    currentLogsCache = logs;
+    if (tabLogsBadge) tabLogsBadge.textContent = logs.length;
+    applyLogsFilter();
+  }
+
+  function applyLogsFilter() {
+    const term = (logSearchInput.value || '').trim().toLowerCase();
+    const statusFilter = logFilterStatus.value;
+
+    let filtered = currentLogsCache.filter(item => {
+      // Filtro de status
+      if (statusFilter === 'success' && !item.sucesso) return false;
+      if (statusFilter === 'failed' && item.sucesso) return false;
+
+      // Filtro de texto
+      if (!term) return true;
+      const haystack = [
+        item.ip,
+        item.cidade,
+        item.regiao,
+        item.pais,
+        item.chave,
+        item.rotulo,
+        item.provedor,
+        item.dispositivo,
+        item.navegador,
+        item.detalhes
+      ].join(' ').toLowerCase();
+
+      return haystack.includes(term);
+    });
+
+    logsTableBody.innerHTML = '';
+    if (filtered.length === 0) {
+      logsTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b;">Nenhum log encontrado para os critérios selecionados.</td></tr>`;
+      return;
+    }
+
+    filtered.forEach(log => {
+      const tr = document.createElement('tr');
+      const isOk = Boolean(log.sucesso);
+
+      let statusBadge;
+      if (isOk) {
+        statusBadge = `<span class="status-pill success">Liberado</span>`;
+      } else if (log.detalhes && /bloqueada|expirada|limite/i.test(log.detalhes)) {
+        statusBadge = `<span class="status-pill warn">Bloqueado</span>`;
+      } else {
+        statusBadge = `<span class="status-pill failed">Negado</span>`;
+      }
+
+      const cityDisplay = log.cidade && log.cidade !== 'N/A' 
+        ? `${log.cidade}${log.regiao ? ', ' + log.regiao : ''}` 
+        : (log.pais || 'Brasil');
+
+      tr.innerHTML = `
+        <td style="color:#94a3b8; font-size:12px; white-space:nowrap;">${formatDate(log.criado_em)}</td>
+        <td>
+          <b style="color:#38bdf8; font-family:monospace; font-size:13px;">${escapeHtml(log.chave || 'N/A')}</b>
+          ${log.rotulo && log.rotulo !== 'N/A' ? `<div style="font-size:11px; color:#64748b;">${escapeHtml(log.rotulo)}</div>` : ''}
+        </td>
+        <td>${statusBadge}</td>
+        <td><span class="ip-badge">${escapeHtml(log.ip || '0.0.0.0')}</span></td>
+        <td>
+          <span class="location-text">
+            <span>📍</span>
+            <span>${escapeHtml(cityDisplay)}</span>
+          </span>
+        </td>
+        <td><span class="provider-text" title="${escapeHtml(log.provedor || 'Desconhecido')}">${escapeHtml(log.provedor || 'N/A')}</span></td>
+        <td>
+          <span class="device-badge">
+            <b>${escapeHtml(log.dispositivo || 'PC')}</b> · ${escapeHtml(log.navegador || 'Browser')}
+          </span>
+        </td>
+        <td style="color:#94a3b8; font-size:11.5px; max-width:200px;">${escapeHtml(log.detalhes || '')}</td>
+      `;
+
+      logsTableBody.appendChild(tr);
+    });
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  logSearchInput.addEventListener('input', applyLogsFilter);
+  logFilterStatus.addEventListener('change', applyLogsFilter);
+  btnRefreshLogs.addEventListener('click', renderLogsView);
+
+  // Exportar para Excel / CSV
+  function exportLogsCSV() {
+    if (!currentLogsCache || currentLogsCache.length === 0) {
+      alert('Não há registros para exportar.');
+      return;
+    }
+
+    const headers = [
+      'Data e Hora (Brasília)',
+      'Chave Digitada',
+      'Identificador / Rótulo',
+      'Status de Acesso',
+      'Endereço IP',
+      'Cidade',
+      'Estado / Região',
+      'País',
+      'Provedor de Internet (ISP)',
+      'Sistema Operacional',
+      'Navegador',
+      'Detalhes / Motivo'
+    ];
+
+    const rows = currentLogsCache.map(l => [
+      formatDate(l.criado_em),
+      l.chave || '',
+      l.rotulo || '',
+      l.sucesso ? 'Acesso Liberado' : 'Acesso Negado',
+      l.ip || '',
+      l.cidade || '',
+      l.regiao || '',
+      l.pais || 'Brasil',
+      l.provedor || '',
+      l.dispositivo || '',
+      l.navegador || '',
+      l.detalhes || ''
+    ]);
+
+    const csvContent = '\uFEFF' + [
+      headers.map(h => `"${h.replace(/"/g, '""')}"`).join(';'),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+    ].join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `auditoria_acessos_subinova_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  btnExportCsv.addEventListener('click', exportLogsCSV);
+
+  /* ==========================================================================
+     ABA 3: ESTATÍSTICAS & ANALYTICS
+     ========================================================================== */
+  async function renderAnalyticsView() {
+    const logs = await Storage.fetchLogs();
+    currentLogsCache = logs;
+
+    const total = logs.length;
+    const successes = logs.filter(l => l.sucesso).length;
+    const failed = total - successes;
+    const rate = total > 0 ? Math.round((successes / total) * 100) : 100;
+
+    const citiesSet = new Set();
+    logs.forEach(l => {
+      if (l.cidade && l.cidade !== 'N/A' && l.cidade !== 'Desconhecido') {
+        citiesSet.add(l.cidade);
+      }
+    });
+
+    analyticsTotal.textContent = total;
+    analyticsRate.textContent = `${rate}%`;
+    analyticsCities.textContent = citiesSet.size;
+    analyticsFailed.textContent = failed;
+
+    renderDailyBarsChart(logs);
+    renderTopRanking(chartTopCities, logs, l => (l.cidade && l.cidade !== 'N/A' ? `${l.cidade} (${l.regiao || 'BR'})` : null));
+    renderTopRanking(chartDevicesList, logs, l => (l.dispositivo ? `${l.dispositivo} · ${l.navegador || 'Web'}` : null));
+    renderTopRanking(chartTopKeys, logs, l => (l.chave ? `${l.chave}${l.rotulo ? ' (' + l.rotulo + ')' : ''}` : null));
+  }
+
+  function renderDailyBarsChart(logs) {
+    chartDailyBars.innerHTML = '';
+    const days = [];
+    const now = new Date();
+
+    // Cria os últimos 7 dias
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dayStr = d.toISOString().slice(0, 10);
+      const label = i === 0 ? 'Hoje' : (i === 1 ? 'Ontem' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
+      days.push({ dayStr, label, count: 0 });
+    }
+
+    logs.forEach(l => {
+      if (!l.criado_em) return;
+      const lDay = l.criado_em.slice(0, 10);
+      const match = days.find(d => d.dayStr === lDay);
+      if (match) match.count++;
+    });
+
+    const maxCount = Math.max(...days.map(d => d.count), 1);
+
+    days.forEach(d => {
+      const col = document.createElement('div');
+      col.className = 'bar-col';
+
+      const heightPercent = Math.max(Math.round((d.count / maxCount) * 100), 5);
+
+      col.innerHTML = `
+        <span class="bar-value">${d.count}</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="height: ${heightPercent}%;"></div>
+        </div>
+        <span class="bar-label">${d.label}</span>
+      `;
+
+      chartDailyBars.appendChild(col);
+    });
+  }
+
+  function renderTopRanking(container, logs, extractor) {
+    container.innerHTML = '';
+    const counts = {};
+
+    logs.forEach(l => {
+      const key = extractor(l);
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    if (sorted.length === 0) {
+      container.innerHTML = `<span style="color:#64748b; font-size:12px;">Sem dados suficientes registrados.</span>`;
+      return;
+    }
+
+    const max = sorted[0][1];
+
+    sorted.forEach(([title, count], index) => {
+      const item = document.createElement('div');
+      item.className = 'ranking-item';
+      const pct = Math.max(Math.round((count / max) * 100), 10);
+
+      item.innerHTML = `
+        <div class="ranking-info">
+          <span class="ranking-title">
+            <span class="ranking-rank ${index === 0 ? 'top1' : ''}">${index + 1}</span>
+            <span>${escapeHtml(title)}</span>
+          </span>
+          <span class="ranking-count">${count} acessos</span>
+        </div>
+        <div class="ranking-bar-track">
+          <div class="ranking-bar-fill" style="width: ${pct}%;"></div>
+        </div>
+      `;
+
+      container.appendChild(item);
+    });
+  }
+
+  /* ==========================================================================
+     ABA 4: BANNER DE AVISOS / COMUNICADOS
+     ========================================================================== */
+  async function renderBannerView() {
+    const cfg = await Storage.getBannerConfig();
+    chkBannerActive.checked = cfg.ativo;
+    bannerMessageInput.value = cfg.mensagem;
+    updateBannerPreview();
+  }
+
+  function updateBannerPreview() {
+    const text = bannerMessageInput.value.trim();
+    if (!text) {
+      bannerPreviewText.textContent = 'Nenhum comunicado ativo no momento.';
+      bannerLivePreview.style.opacity = '0.5';
+    } else {
+      bannerPreviewText.textContent = text;
+      bannerLivePreview.style.opacity = '1';
+    }
+  }
+
+  bannerMessageInput.addEventListener('input', updateBannerPreview);
+
+  formBanner.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const ativo = chkBannerActive.checked;
+    const msg = bannerMessageInput.value.trim();
+
+    const saveBtn = document.getElementById('btn-save-banner');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Salvando...';
+
+    try {
+      await Storage.setBannerConfig(ativo, msg);
+      saveBtn.innerHTML = `<span>✅ Comunicado Salvo!</span>`;
+      setTimeout(() => {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          <span>Salvar Comunicado</span>
+        `;
+      }, 1800);
+    } catch (err) {
+      alert('Erro ao salvar comunicado: ' + err.message);
+      saveBtn.disabled = false;
+    }
+  });
+
+  /* ==========================================================================
      GERENCIAMENTO DE MODAIS
      ========================================================================== */
   function openModal(el) { el.classList.remove('hidden'); }
@@ -609,6 +1102,8 @@
   btnOpenNewKey.addEventListener('click', () => {
     keyInputVal.value = '';
     keyInputLabel.value = '';
+    keyInputExpire.value = '';
+    keyInputMaxUses.value = '';
     keyInputActive.checked = true;
     openModal(modalKey);
     keyInputVal.focus();
@@ -635,12 +1130,17 @@
       newId = 'key-' + Date.now();
     }
 
+    const expireVal = keyInputExpire.value ? new Date(keyInputExpire.value).toISOString() : null;
+    const maxUsesVal = keyInputMaxUses.value ? parseInt(keyInputMaxUses.value, 10) : null;
+
     const item = {
       id: newId,
       chave: val,
       chave_hash: hash,
       rotulo: label,
       ativa: keyInputActive.checked,
+      expira_em: expireVal,
+      limite_usos: maxUsesVal,
       criada_em: new Date().toISOString(),
       ultimo_acesso: null,
       total_usos: 0

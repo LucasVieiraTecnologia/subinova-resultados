@@ -13,6 +13,8 @@
   const bgVideo = document.getElementById('bg-video');
   const btnSkipVideo = document.getElementById('btn-skip-video');
   const authModal = document.getElementById('auth-modal');
+  const authBanner = document.getElementById('auth-banner');
+  const authBannerText = document.getElementById('auth-banner-text');
   const authForm = document.getElementById('auth-form');
   const passwordInput = document.getElementById('password-input');
   const btnToggleEye = document.getElementById('btn-toggle-eye');
@@ -129,6 +131,144 @@
   }
 
   /* ==========================================================================
+     TELEMETRIA & AUDITORIA DE ACESSOS (IP, GEOLOCALIZAÇÃO E DISPOSITIVO)
+     ========================================================================== */
+  function getClientDeviceInfo() {
+    const ua = navigator.userAgent || '';
+    let os = 'Desktop';
+    if (/windows/i.test(ua)) os = 'Windows';
+    else if (/iphone|ipad|ipod/i.test(ua)) os = 'iOS';
+    else if (/android/i.test(ua)) os = 'Android';
+    else if (/macintosh|mac os x/i.test(ua)) os = 'macOS';
+    else if (/linux/i.test(ua)) os = 'Linux';
+
+    let browser = 'Navegador';
+    if (/edg/i.test(ua)) browser = 'Edge';
+    else if (/chrome|crios/i.test(ua)) browser = 'Chrome';
+    else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
+    else if (/safari/i.test(ua)) browser = 'Safari';
+    else if (/opr\//i.test(ua)) browser = 'Opera';
+
+    return { os, browser };
+  }
+
+  let cachedIpInfo = null;
+  async function fetchIpLocation() {
+    if (cachedIpInfo) return cachedIpInfo;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2600);
+      const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const d = await res.json();
+        cachedIpInfo = {
+          ip: d.ip || 'Desconhecido',
+          cidade: d.city || '',
+          regiao: d.region || '',
+          pais: d.country_name || 'Brasil',
+          provedor: d.org || ''
+        };
+        return cachedIpInfo;
+      }
+    } catch (e) {
+      try {
+        const resIp = await fetch('https://api.ipify.org?format=json');
+        if (resIp.ok) {
+          const d = await resIp.json();
+          cachedIpInfo = { ip: d.ip, cidade: '', regiao: '', pais: 'Brasil', provedor: '' };
+          return cachedIpInfo;
+        }
+      } catch (err) {}
+    }
+    return { ip: 'Desconhecido', cidade: '', regiao: '', pais: 'Brasil', provedor: '' };
+  }
+
+  async function recordAccessLog({ chave, rotulo, sucesso, detalhes }) {
+    const device = getClientDeviceInfo();
+    const ipInfo = await fetchIpLocation();
+
+    const logEntry = {
+      chave: chave || 'N/A',
+      rotulo: rotulo || 'N/A',
+      sucesso: Boolean(sucesso),
+      ip: ipInfo.ip || 'N/A',
+      cidade: ipInfo.cidade || 'N/A',
+      regiao: ipInfo.regiao || 'N/A',
+      pais: ipInfo.pais || 'Brasil',
+      provedor: ipInfo.provedor || 'N/A',
+      dispositivo: device.os,
+      navegador: device.browser,
+      detalhes: detalhes || '',
+      criado_em: new Date().toISOString()
+    };
+
+    // 1. Envia para Supabase em segundo plano
+    const cfg = KeyStore.getCloudConfig();
+    if (cfg && cfg.url && cfg.key) {
+      fetch(`${cfg.url}/rest/v1/logs_acesso`, {
+        method: 'POST',
+        headers: {
+          'apikey': cfg.key,
+          'Authorization': `Bearer ${cfg.key}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(logEntry)
+      }).catch(() => {});
+    }
+
+    // 2. Salva localmente como histórico de contingência
+    try {
+      const localLogs = JSON.parse(localStorage.getItem('subinova_logs_acesso')) || [];
+      localLogs.unshift(logEntry);
+      if (localLogs.length > 200) localLogs.pop();
+      localStorage.setItem('subinova_logs_acesso', JSON.stringify(localLogs));
+    } catch (e) {}
+  }
+
+  /* ==========================================================================
+     PROTEÇÃO CONTRA FORÇA BRUTA (BLOQUEIO TEMPORÁRIO APÓS 5 FALHAS)
+     ========================================================================== */
+  const Security = {
+    KEY: 'subinova_sec_lockout',
+    MAX_ATTEMPTS: 5,
+    LOCK_DURATION_MS: 3 * 60 * 1000, // 3 minutos
+
+    getState() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(this.KEY));
+        if (!raw) return { attempts: 0, lockedUntil: 0, isLocked: false };
+        if (raw.lockedUntil && Date.now() > raw.lockedUntil) {
+          this.reset();
+          return { attempts: 0, lockedUntil: 0, isLocked: false };
+        }
+        return {
+          attempts: raw.attempts || 0,
+          lockedUntil: raw.lockedUntil || 0,
+          isLocked: Boolean(raw.lockedUntil && Date.now() < raw.lockedUntil)
+        };
+      } catch (e) {
+        return { attempts: 0, lockedUntil: 0, isLocked: false };
+      }
+    },
+
+    recordFailure() {
+      const s = this.getState();
+      s.attempts = (s.attempts || 0) + 1;
+      if (s.attempts >= this.MAX_ATTEMPTS) {
+        s.lockedUntil = Date.now() + this.LOCK_DURATION_MS;
+        s.isLocked = true;
+      }
+      localStorage.setItem(this.KEY, JSON.stringify(s));
+      return s;
+    },
+
+    reset() {
+      localStorage.removeItem(this.KEY);
+    }
+  };
+
+  /* ==========================================================================
      CAMADA DE VALIDAÇÃO (NUVEM / LOCALSTORAGE)
      ========================================================================== */
   const KeyStore = {
@@ -154,11 +294,33 @@
             const data = await res.json();
             if (data.length) return data[0].valor === 'true';
           }
-        } catch (e) {
-          console.warn('Erro ao checar manutenção na nuvem:', e);
-        }
+        } catch (e) {}
       }
       return localStorage.getItem('subinova_modo_manutencao') === 'true';
+    },
+
+    async fetchBannerConfig() {
+      const cfg = this.getCloudConfig();
+      if (cfg && cfg.url && cfg.key) {
+        try {
+          const res = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=in.(banner_ativo,banner_mensagem)&select=*`, {
+            headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
+          });
+          if (res.ok) {
+            const rows = await res.json();
+            const map = {};
+            rows.forEach(r => { map[r.chave] = r.valor; });
+            return {
+              ativo: map['banner_ativo'] === 'true',
+              mensagem: map['banner_mensagem'] || ''
+            };
+          }
+        } catch (e) {}
+      }
+      return {
+        ativo: localStorage.getItem('subinova_banner_ativo') === 'true',
+        mensagem: localStorage.getItem('subinova_banner_msg') || ''
+      };
     },
 
     async fetchAllKeys() {
@@ -169,7 +331,8 @@
             headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
           });
           if (res.ok) {
-            return await res.json();
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) return data;
           }
         } catch (e) {
           console.warn('Erro ao buscar chaves na nuvem, usando local:', e);
@@ -184,7 +347,6 @@
         } catch (e) {}
       }
 
-      // Fallback padrão se não houver chaves salvas
       return [{
         id: 'key-default',
         chave: '@3293',
@@ -233,7 +395,7 @@
   /* ==========================================================================
      ABERTURA DO MODAL DE AUTENTICAÇÃO
      ========================================================================== */
-  function showAuthModal() {
+  async function showAuthModal() {
     if (modalOpened) return;
     modalOpened = true;
 
@@ -246,10 +408,49 @@
       try { bgVideo.pause(); } catch (e) {}
     }
 
+    // Carrega banner se houver comunicado ativo
+    try {
+      const banner = await KeyStore.fetchBannerConfig();
+      if (banner.ativo && banner.mensagem && authBanner && authBannerText) {
+        authBannerText.textContent = banner.mensagem;
+        authBanner.classList.remove('hidden');
+      }
+    } catch (e) {}
+
     authModal.classList.remove('hidden');
     passwordInput.value = '';
     authError.classList.remove('visible');
-    passwordInput.focus();
+
+    // Checa bloqueio de força bruta
+    const lockState = Security.getState();
+    if (lockState.isLocked) {
+      startLockoutCountdown(lockState.lockedUntil);
+    } else {
+      passwordInput.focus();
+    }
+  }
+
+  function startLockoutCountdown(until) {
+    passwordInput.disabled = true;
+    authError.classList.add('visible');
+
+    function update() {
+      const rem = Math.ceil((until - Date.now()) / 1000);
+      if (rem <= 0) {
+        Security.reset();
+        passwordInput.disabled = false;
+        authError.classList.remove('visible');
+        passwordInput.focus();
+        return;
+      }
+      const mins = Math.floor(rem / 60).toString().padStart(2, '0');
+      const secs = (rem % 60).toString().padStart(2, '0');
+      if (authErrorText) {
+        authErrorText.textContent = `Muitas tentativas incorretas. Aguarde ${mins}:${secs} antes de tentar novamente.`;
+      }
+      setTimeout(update, 1000);
+    }
+    update();
   }
 
   /* ==========================================================================
@@ -258,32 +459,77 @@
   async function validateAccessKey(password) {
     if (!password) return { ok: false, error: 'Digite uma senha.' };
 
+    // 0. Checa bloqueio anti-brute force
+    const sec = Security.getState();
+    if (sec.isLocked) {
+      return { ok: false, error: 'Acesso temporariamente bloqueado por excesso de tentativas.' };
+    }
+
     // 1. Checa se o painel está em manutenção
     const inMaintenance = await KeyStore.isMaintenanceActive();
     if (inMaintenance) {
+      recordAccessLog({ chave: password, rotulo: 'Tentativa', sucesso: false, detalhes: 'Bloqueado: Painel em Manutenção' });
       return { ok: false, error: 'Painel em manutenção temporária. Tente mais tarde.' };
     }
 
-    const hash = await computeSHA256(password);
+    const clean = password.trim();
+    const hash = await computeSHA256(clean);
     const keys = await KeyStore.fetchAllKeys();
 
-    // 2. Busca a chave correspondente (por texto exato ou hash SHA-256)
-    const match = keys.find(k => k.chave === password || k.chave_hash === hash);
+    // 2. Busca chave correspondente
+    const match = keys.find(k => k.chave === clean || k.chave === password || k.chave_hash === hash);
 
     if (match) {
+      // 2.1 Checa se chave está bloqueada
       if (!match.ativa) {
-        return { ok: false, error: 'Esta chave de acesso foi desativada ou revogada.' };
+        Security.recordFailure();
+        recordAccessLog({ chave: clean, rotulo: match.rotulo, sucesso: false, detalhes: 'Chave revogada/bloqueada' });
+        return { ok: false, error: 'Esta chave de acesso foi desativada ou revogada pela administração.' };
       }
+
+      // 2.2 Checa se chave expirou por data
+      if (match.expira_em) {
+        const expDate = new Date(match.expira_em);
+        if (!isNaN(expDate) && Date.now() > expDate.getTime()) {
+          Security.recordFailure();
+          recordAccessLog({ chave: clean, rotulo: match.rotulo, sucesso: false, detalhes: 'Chave expirada por data' });
+          return { ok: false, error: 'Esta chave de acesso expirou a data de validade.' };
+        }
+      }
+
+      // 2.3 Checa se atingiu o limite de utilizações
+      if (match.limite_usos && Number(match.limite_usos) > 0) {
+        if ((match.total_usos || 0) >= Number(match.limite_usos)) {
+          Security.recordFailure();
+          recordAccessLog({ chave: clean, rotulo: match.rotulo, sucesso: false, detalhes: 'Limite de usos atingido' });
+          return { ok: false, error: 'Esta chave atingiu o limite máximo de utilizações permitidas.' };
+        }
+      }
+
+      // SUCESSO!
+      Security.reset();
       KeyStore.recordUsage(match);
+      recordAccessLog({ chave: match.chave, rotulo: match.rotulo, sucesso: true, detalhes: 'Acesso autenticado com sucesso' });
       return { ok: true };
     }
 
-    // 3. Fallback de emergência (@3293) caso a lista do banco esteja vazia
-    if (hash === DEFAULT_HASH) {
+    // 3. Fallback de emergência (@3293)
+    if (hash === DEFAULT_HASH || clean === '@3293') {
+      Security.reset();
+      recordAccessLog({ chave: '@3293', rotulo: 'Padrão', sucesso: true, detalhes: 'Acesso autenticado via fallback' });
       return { ok: true };
     }
 
-    return { ok: false, error: 'Senha incorreta. Tente novamente.' };
+    // FALHA: Senha incorreta
+    const afterFail = Security.recordFailure();
+    recordAccessLog({ chave: clean, rotulo: 'Tentativa Incorreta', sucesso: false, detalhes: `Senha incorreta (tentativa ${afterFail.attempts}/${Security.MAX_ATTEMPTS})` });
+
+    if (afterFail.isLocked) {
+      startLockoutCountdown(afterFail.lockedUntil);
+      return { ok: false, error: 'Limite de 5 tentativas atingido. Bloqueado por 3 minutos.' };
+    }
+
+    return { ok: false, error: `Senha incorreta. (${afterFail.attempts}/${Security.MAX_ATTEMPTS} tentativas)` };
   }
 
   async function handleAuthSuccess() {
@@ -340,7 +586,6 @@
     pbiIframe.addEventListener('load', () => {
       if (pbiLoading) pbiLoading.classList.add('hidden');
     });
-    // Fallback de segurança para esconder o loading após 3.5s
     setTimeout(() => {
       if (pbiLoading) pbiLoading.classList.add('hidden');
     }, 3500);
@@ -354,7 +599,7 @@
     });
   }
 
-  // 3. Clique na tela ou pressionar tecla antes de abrir o modal -> abre imediatamente
+  // 3. Clique na tela ou tecla antes de abrir o modal -> abre imediatamente
   window.addEventListener('click', (e) => {
     if (!modalOpened) {
       showAuthModal();
@@ -368,19 +613,17 @@
       window.location.href = 'admin.html';
       return;
     }
-    // Qualquer tecla antes de abrir o modal -> abre imediatamente
     if (!modalOpened && !e.ctrlKey && !e.metaKey && !e.altKey) {
       showAuthModal();
     }
   });
 
-  // 4. Quando o vídeo de 4s termina ou falha -> abre a tela de senha automaticamente
+  // 4. Quando o vídeo de 4s termina ou falha -> abre o modal
   if (bgVideo) {
     bgVideo.addEventListener('ended', showAuthModal);
     bgVideo.addEventListener('error', showAuthModal);
     bgVideo.addEventListener('stalled', showAuthModal);
 
-    // Fallback de segurança: caso o vídeo demore (~4.2s)
     setTimeout(() => {
       if (!modalOpened) {
         showAuthModal();
@@ -394,15 +637,16 @@
     authError.classList.remove('visible');
     const val = passwordInput.value.trim();
     
-    // Se o usuário já digitou 4 ou mais caracteres, verifica silenciosamente se é uma chave válida
     clearTimeout(inputTimer);
     if (val.length >= 4) {
       inputTimer = setTimeout(async () => {
+        const sec = Security.getState();
+        if (sec.isLocked) return;
         const res = await validateAccessKey(val);
         if (res.ok) {
           handleAuthSuccess();
         }
-      }, 150);
+      }, 180);
     }
   });
 
@@ -428,7 +672,7 @@
   });
 
   /* ==========================================================================
-     STARTUP: Tenta reproduzir o vídeo em tela cheia imediatamente
+     STARTUP
      ========================================================================== */
   window.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -445,7 +689,6 @@
       const playPromise = bgVideo.play();
       if (playPromise !== undefined) {
         playPromise.catch(() => {
-          // Se o navegador bloquear autoplay, abre o modal imediatamente
           showAuthModal();
         });
       }

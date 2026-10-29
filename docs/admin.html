@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Administração de Chaves · SUBINOVA</title>
+  <title>Administração de Chaves & Auditoria · SUBINOVA</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230284c7'><path d='M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 6c1.4 0 2.5 1.1 2.5 2.5 0 .7-.3 1.3-.8 1.8l1.3 4.2h-6l1.3-4.2c-.5-.5-.8-1.1-.8-1.8 0-1.4 1.1-2.5 2.5-2.5z'/></svg>">
-  <link rel="stylesheet" href="admin.css">
+  <link rel="stylesheet" href="admin.css?v=2.2.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -25,7 +25,7 @@
 
       <div class="login-header">
         <h1>Painel Administrativo</h1>
-        <p>Gerenciamento de chaves de acesso, bloqueios e segurança:</p>
+        <p>Gerenciamento de chaves de acesso, bloqueios, auditoria e segurança:</p>
       </div>
 
       <form id="admin-login-form" autocomplete="off" onsubmit="return false;">
@@ -93,7 +93,7 @@
         </div>
         <div>
           <h2>SUBINOVA · Painel de Controle</h2>
-          <span class="sub-brand">Gestão de Chaves de Acesso e Segurança</span>
+          <span class="sub-brand">Gestão de Chaves, Auditoria de Acessos & Segurança</span>
         </div>
       </div>
 
@@ -125,93 +125,319 @@
 
     <!-- Conteúdo Principal -->
     <main class="admin-main">
-      <!-- Barra de Estatísticas / KPIs -->
-      <section class="kpi-grid">
-        <div class="kpi-card">
-          <span class="kpi-label">Total de Chaves</span>
-          <b id="kpi-total-keys" class="kpi-value">0</b>
-          <span class="kpi-sub">cadastradas no sistema</span>
-        </div>
+      <!-- Navegação por Abas -->
+      <nav class="admin-tabs-nav">
+        <button type="button" class="tab-btn active" data-tab="tab-keys">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 2l-2 2m-1.5 1.5L16 7l-2-2-4 4 2 2-7 7H2v-3l7-7-2-2 4-4 1.5 1.5L19 4l2-2z"/>
+          </svg>
+          <span>Chaves de Acesso</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="tab-logs">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          <span>Logs de Acesso & IP</span>
+          <span id="tab-logs-badge" class="tab-badge">0</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="tab-analytics">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="20" x2="18" y2="10"/>
+            <line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          <span>Estatísticas & Cidades</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="tab-banner">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <span>Avisos / Comunicados</span>
+        </button>
+      </nav>
 
-        <div class="kpi-card success">
-          <span class="kpi-label">Chaves Ativas</span>
-          <b id="kpi-active-keys" class="kpi-value">0</b>
-          <span class="kpi-sub">com acesso liberado</span>
-        </div>
-
-        <div class="kpi-card danger">
-          <span class="kpi-label">Chaves Bloqueadas</span>
-          <b id="kpi-blocked-keys" class="kpi-value">0</b>
-          <span class="kpi-sub">acesso revogado</span>
-        </div>
-
-        <div class="kpi-card alert">
-          <div class="maintenance-header">
-            <span class="kpi-label">Modo Manutenção Geral</span>
-            <label class="switch">
-              <input type="checkbox" id="chk-maintenance">
-              <span class="slider"></span>
-            </label>
+      <!-- ==================== ABA 1: CHAVES DE ACESSO ==================== -->
+      <div id="tab-keys" class="tab-pane active">
+        <!-- Barra de Estatísticas / KPIs -->
+        <section class="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-label">Total de Chaves</span>
+            <b id="kpi-total-keys" class="kpi-value">0</b>
+            <span class="kpi-sub">cadastradas no sistema</span>
           </div>
-          <b id="kpi-maintenance-status" class="kpi-value-sm">Desativado</b>
-          <span class="kpi-sub">bloqueia o site para todos os visitantes</span>
-        </div>
-      </section>
 
-      <!-- Barra de Ações & Tabela -->
-      <section class="table-section">
-        <div class="table-toolbar">
-          <div class="toolbar-left">
-            <h3>Chaves de Acesso Cadastradas</h3>
-            <p>Gerencie senhas, libere acessos ou bloqueie chaves com 1 clique:</p>
+          <div class="kpi-card success">
+            <span class="kpi-label">Chaves Ativas</span>
+            <b id="kpi-active-keys" class="kpi-value">0</b>
+            <span class="kpi-sub">com acesso liberado</span>
           </div>
 
-          <div class="toolbar-right">
-            <button id="btn-open-new-key" class="btn-primary">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              <span>Criar Nova Chave</span>
-            </button>
-
-            <button id="btn-open-cloud-config" class="btn-secondary" title="Conectar ao Supabase para sincronização global">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
-              </svg>
-              <span>Conexão em Nuvem</span>
-            </button>
-
-            <button id="btn-open-change-admin-pass" class="btn-secondary" title="Alterar senha mestre de administrador">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-              </svg>
-              <span>Senha ADM</span>
-            </button>
+          <div class="kpi-card danger">
+            <span class="kpi-label">Chaves Bloqueadas</span>
+            <b id="kpi-blocked-keys" class="kpi-value">0</b>
+            <span class="kpi-sub">acesso revogado</span>
           </div>
-        </div>
 
-        <!-- Tabela -->
-        <div class="table-container">
-          <table class="keys-table">
-            <thead>
-              <tr>
-                <th>SENHA / CHAVE</th>
-                <th>IDENTIFICADOR / GRUPO</th>
-                <th>CRIADA EM</th>
-                <th>ÚLTIMO ACESSO</th>
-                <th>TOTAL USOS</th>
-                <th>STATUS</th>
-                <th style="text-align: right;">AÇÕES</th>
-              </tr>
-            </thead>
-            <tbody id="keys-table-body">
-              <!-- Linhas geradas via JavaScript -->
-            </tbody>
-          </table>
-        </div>
-      </section>
+          <div class="kpi-card alert">
+            <div class="maintenance-header">
+              <span class="kpi-label">Modo Manutenção Geral</span>
+              <label class="switch">
+                <input type="checkbox" id="chk-maintenance">
+                <span class="slider"></span>
+              </label>
+            </div>
+            <b id="kpi-maintenance-status" class="kpi-value-sm">Desativado</b>
+            <span class="kpi-sub">bloqueia o site para todos os visitantes</span>
+          </div>
+        </section>
+
+        <!-- Barra de Ações & Tabela -->
+        <section class="table-section">
+          <div class="table-toolbar">
+            <div class="toolbar-left">
+              <h3>Chaves de Acesso Cadastradas</h3>
+              <p>Gerencie senhas, libere acessos, defina limites de uso ou prazos de expiração:</p>
+            </div>
+
+            <div class="toolbar-right">
+              <button id="btn-open-new-key" class="btn-primary">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                <span>Criar Nova Chave</span>
+              </button>
+
+              <button id="btn-open-cloud-config" class="btn-secondary" title="Conectar ao Supabase para sincronização global">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+                </svg>
+                <span>Conexão em Nuvem</span>
+              </button>
+
+              <button id="btn-open-change-admin-pass" class="btn-secondary" title="Alterar senha mestre de administrador">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>Senha ADM</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Tabela de Chaves -->
+          <div class="table-container">
+            <table class="keys-table">
+              <thead>
+                <tr>
+                  <th>SENHA / CHAVE</th>
+                  <th>IDENTIFICADOR / GRUPO</th>
+                  <th>CRIADA EM</th>
+                  <th>VALIDADE / LIMITE</th>
+                  <th>ÚLTIMO ACESSO</th>
+                  <th>TOTAL USOS</th>
+                  <th>STATUS</th>
+                  <th style="text-align: right;">AÇÕES</th>
+                </tr>
+              </thead>
+              <tbody id="keys-table-body">
+                <!-- Linhas geradas via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ==================== ABA 2: LOGS DE ACESSO & IP ==================== -->
+      <div id="tab-logs" class="tab-pane hidden">
+        <section class="table-section">
+          <div class="table-toolbar">
+            <div class="toolbar-left">
+              <h3>Auditoria de Acessos em Tempo Real</h3>
+              <p>Histórico completo de IPs, cidades, provedores, dispositivos e tentativas de login:</p>
+            </div>
+
+            <div class="toolbar-right">
+              <div class="search-box">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text" id="log-search-input" placeholder="Buscar IP, cidade, chave...">
+              </div>
+
+              <select id="log-filter-status" class="filter-select">
+                <option value="all">Todos os Status</option>
+                <option value="success">Apenas Sucessos</option>
+                <option value="failed">Apenas Falhas / Bloqueios</option>
+              </select>
+
+              <button id="btn-export-csv" class="btn-secondary" title="Exportar histórico completo para Excel (CSV)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>Exportar CSV</span>
+              </button>
+
+              <button id="btn-refresh-logs" class="btn-primary" title="Atualizar lista de logs">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                <span>Atualizar</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Tabela de Logs -->
+          <div class="table-container">
+            <table class="keys-table logs-table">
+              <thead>
+                <tr>
+                  <th>DATA & HORA</th>
+                  <th>CHAVE DIGITADA</th>
+                  <th>STATUS</th>
+                  <th>ENDEREÇO IP</th>
+                  <th>LOCALIZAÇÃO (CIDADE/UF)</th>
+                  <th>PROVEDOR / ISP</th>
+                  <th>DISPOSITIVO / BROWSER</th>
+                  <th>DETALHES</th>
+                </tr>
+              </thead>
+              <tbody id="logs-table-body">
+                <!-- Linhas geradas via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ==================== ABA 3: ESTATÍSTICAS & CIDADES ==================== -->
+      <div id="tab-analytics" class="tab-pane hidden">
+        <!-- KPIs de Analytics -->
+        <section class="analytics-kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-label">Total de Acessos Auditados</span>
+            <b id="analytics-total-count" class="kpi-value">0</b>
+            <span class="kpi-sub">registros capturados</span>
+          </div>
+          <div class="kpi-card success">
+            <span class="kpi-label">Taxa de Sucesso</span>
+            <b id="analytics-success-rate" class="kpi-value">100%</b>
+            <span class="kpi-sub">logins bem-sucedidos</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Cidades Únicas</span>
+            <b id="analytics-cities-count" class="kpi-value">0</b>
+            <span class="kpi-sub">origens geográficas</span>
+          </div>
+          <div class="kpi-card alert">
+            <span class="kpi-label">Tentativas Incorretas</span>
+            <b id="analytics-failed-count" class="kpi-value">0</b>
+            <span class="kpi-sub">senhas erradas ou bloqueadas</span>
+          </div>
+        </section>
+
+        <!-- Grade de Gráficos -->
+        <section class="analytics-charts-grid">
+          <div class="chart-card">
+            <div class="chart-header">
+              <h4>📅 Acessos Diários (Últimos 7 dias)</h4>
+              <span class="chart-sub">Volume de entradas no portal por dia</span>
+            </div>
+            <div id="chart-daily-bars" class="daily-bars-container">
+              <!-- Barras geradas dinamicamente -->
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-header">
+              <h4>📍 Top Cidades com Mais Acessos</h4>
+              <span class="chart-sub">Origem geográfica dos visitantes</span>
+            </div>
+            <div id="chart-top-cities" class="top-ranking-list">
+              <!-- Itens de ranking gerados via JS -->
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-header">
+              <h4>💻 Plataformas & Dispositivos</h4>
+              <span class="chart-sub">Sistemas operacionais e navegadores</span>
+            </div>
+            <div id="chart-devices-list" class="top-ranking-list">
+              <!-- Itens de dispositivos -->
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-header">
+              <h4>🔑 Distribuição por Chave</h4>
+              <span class="chart-sub">Senhas mais acionadas pelos usuários</span>
+            </div>
+            <div id="chart-top-keys" class="top-ranking-list">
+              <!-- Itens de ranking -->
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ==================== ABA 4: AVISOS / COMUNICADOS ==================== -->
+      <div id="tab-banner" class="tab-pane hidden">
+        <section class="banner-settings-card">
+          <div class="card-header-with-badge">
+            <div>
+              <h3>📢 Banner de Comunicados no Topo do Portal</h3>
+              <p>Exiba mensagens de aviso, comunicados de atualização ou alertas no topo do portal para todos os visitantes:</p>
+            </div>
+            <div class="banner-switch-wrap">
+              <span>Exibir banner no site:</span>
+              <label class="switch">
+                <input type="checkbox" id="chk-banner-active">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <form id="form-banner" autocomplete="off" onsubmit="return false;">
+            <div class="form-group">
+              <label for="banner-message-input">Mensagem do Comunicado</label>
+              <textarea 
+                id="banner-message-input" 
+                rows="3" 
+                placeholder="Ex: Atenção: Os dados referentes a Outubro já foram totalmente atualizados. Bom trabalho!"
+              ></textarea>
+              <small class="field-hint">Aparecerá com um ícone de megafone no topo da tela inicial.</small>
+            </div>
+
+            <div class="form-group">
+              <label>Pré-visualização do Banner no Portal:</label>
+              <div id="banner-live-preview" class="banner-preview-box">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span id="banner-preview-text">Nenhum comunicado ativo no momento.</span>
+              </div>
+            </div>
+
+            <div class="form-actions-right">
+              <button type="submit" id="btn-save-banner" class="btn-primary">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                <span>Salvar Comunicado</span>
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
     </main>
   </div>
 
@@ -242,6 +468,20 @@
           <label for="key-input-label">Identificador / Destinatário</label>
           <input type="text" id="key-input-label" placeholder="Ex: Equipe Interna, Diretoria DPD, Reunião FAPEMIG" required>
           <small class="field-hint">Um nome para você saber para quem entregou essa senha.</small>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="key-input-expire">Validade / Expiração (Opcional)</label>
+            <input type="datetime-local" id="key-input-expire">
+            <small class="field-hint">Deixe vazio para acesso vitalício.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="key-input-max-uses">Limite de Usos (Opcional)</label>
+            <input type="number" id="key-input-max-uses" min="1" placeholder="Ex: 50">
+            <small class="field-hint">Deixe vazio para ilimitado.</small>
+          </div>
         </div>
 
         <div class="form-group checkbox-group">
@@ -277,7 +517,7 @@
           </svg>
           <div>
             <b>Como funciona a Nuvem Gratuita:</b>
-            <p>Conectando ao <b>Supabase</b> (PostgreSQL gratuito), qualquer chave criada ou bloqueada passa a valer instantaneamente para <b>todos os usuários do mundo</b> no GitHub Pages.</p>
+            <p>Conectando ao <b>Supabase</b> (PostgreSQL gratuito), qualquer chave criada, bloqueada ou log de acesso passa a sincronizar instantaneamente para <b>todos os usuários do mundo</b> no GitHub Pages.</p>
           </div>
         </div>
 
@@ -338,7 +578,7 @@
     </div>
   </div>
 
-  <script src="config.js?v=2.1.0"></script>
-  <script src="admin.js?v=2.1.0"></script>
+  <script src="config.js?v=2.2.0"></script>
+  <script src="admin.js?v=2.2.0"></script>
 </body>
 </html>

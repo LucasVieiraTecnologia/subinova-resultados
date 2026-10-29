@@ -1,6 +1,6 @@
 -- ============================================================================
 -- BANCO DE DADOS EM NUVEM (SUPABASE / POSTGRESQL GRATUITO)
--- Portal de Resultados SUBINOVA · Sistema de Chaves de Acesso e ADM
+-- Portal de Resultados SUBINOVA · Sistema Completo de Chaves, Logs e Auditoria
 -- ============================================================================
 
 -- 1. Tabela de Chaves de Acesso
@@ -10,12 +10,18 @@ CREATE TABLE IF NOT EXISTS public.chaves_acesso (
     chave_hash TEXT NOT NULL,                 -- Hash SHA-256 da senha
     rotulo TEXT NOT NULL,                     -- Nome/Identificador (ex: Geral, Diretoria)
     ativa BOOLEAN NOT NULL DEFAULT true,      -- true = liberada, false = bloqueada
+    expira_em TIMESTAMPTZ,                    -- Data/Hora limite de validade (opcional)
+    limite_usos INTEGER,                      -- Limite máximo de utilizações (opcional)
     criada_em TIMESTAMPTZ DEFAULT NOW(),
     ultimo_acesso TIMESTAMPTZ,
     total_usos INTEGER DEFAULT 0
 );
 
--- Se a tabela já existia como UUID, converte para TEXT
+-- Adicionar colunas caso a tabela já exista
+ALTER TABLE public.chaves_acesso ADD COLUMN IF NOT EXISTS expira_em TIMESTAMPTZ;
+ALTER TABLE public.chaves_acesso ADD COLUMN IF NOT EXISTS limite_usos INTEGER;
+
+-- Se a coluna ID existia como UUID, converte para TEXT
 DO $$
 BEGIN
     IF EXISTS (
@@ -47,12 +53,32 @@ INSERT INTO public.configuracoes (chave, valor)
 VALUES 
     ('modo_manutencao', 'false'),
     ('mensagem_manutencao', 'Painel temporariamente indisponível para atualização.'),
+    ('banner_ativo', 'false'),
+    ('banner_mensagem', 'Bem-vindo ao Portal de Resultados SUBINOVA.'),
     ('admin_hash', 'e306389b1195c6e87ed86d733e290d9ab54864ad313ab6424b3fa72b6a2a6e9b')
 ON CONFLICT (chave) DO NOTHING;
 
--- 3. Políticas de Segurança (Row Level Security - RLS)
+-- 3. Tabela de Logs de Acesso e Auditoria (IP, Geolocalização, Dispositivo)
+CREATE TABLE IF NOT EXISTS public.logs_acesso (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    chave TEXT,
+    rotulo TEXT,
+    sucesso BOOLEAN NOT NULL DEFAULT true,
+    ip TEXT,
+    cidade TEXT,
+    regiao TEXT,
+    pais TEXT,
+    provedor TEXT,
+    dispositivo TEXT,
+    navegador TEXT,
+    detalhes TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Políticas de Segurança (Row Level Security - RLS)
 ALTER TABLE public.chaves_acesso ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.configuracoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.logs_acesso ENABLE ROW LEVEL SECURITY;
 
 -- Limpar políticas antigas se existirem para evitar duplicidade
 DROP POLICY IF EXISTS "Acesso total a chaves" ON public.chaves_acesso;
@@ -60,10 +86,14 @@ DROP POLICY IF EXISTS "Leitura pública de chaves ativas" ON public.chaves_acess
 DROP POLICY IF EXISTS "Atualização de estatísticas de uso" ON public.chaves_acesso;
 DROP POLICY IF EXISTS "Inserção e administração de chaves" ON public.chaves_acesso;
 DROP POLICY IF EXISTS "Acesso público a configurações" ON public.configuracoes;
+DROP POLICY IF EXISTS "Acesso total a logs" ON public.logs_acesso;
 
--- Permite operações com a anon key
+-- Permite operações com a chave anon
 CREATE POLICY "Acesso total a chaves" 
 ON public.chaves_acesso FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Acesso público a configurações" 
 ON public.configuracoes FOR ALL USING (true) WITH CHECK (true);
+
+CREATE POLICY "Acesso total a logs" 
+ON public.logs_acesso FOR ALL USING (true) WITH CHECK (true);
