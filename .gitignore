@@ -1,0 +1,5 @@
+# Scratch and temporary dev scripts
+scratch/
+preview/
+*.log
+*.tmp

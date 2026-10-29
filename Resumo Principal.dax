@@ -1,0 +1,2579 @@
+Resumo Principal = 
+-- =====================================================================================
+--  RESUMO PRINCIPAL  ·  v5 (Mapa 3D Interativo de Minas Gerais + Modo Tela Cheia)
+--  • Design institucional limpo (tipografia Segoe UI, números tabulares, ícones SVG,
+--    paleta coesa por Diretoria, sem emojis decorativos).
+--  • Gráfico 3D (Three.js) segmentado em 4 arcos por Diretoria (DPD, DCTT, DIPRO, DIAE).
+--  • Filtro combinado por Diretoria, Município clicável e busca textual instantânea.
+--  • Ordenação de cartões, subtotais em R$ por programa e rolagem isolada no visual.
+-- =====================================================================================
+
+VAR BuscaAtiva = ISFILTERED ( 'BuscaIndice'[Keyword] )
+VAR TermosPesquisados = VALUES ( 'BuscaIndice'[Keyword] )
+VAR TotalTermosPesquisados = COUNTROWS ( TermosPesquisados )
+
+VAR ID_selecionados_AND =
+    FILTER (
+        CALCULATETABLE ( VALUES ( ProjetosCMunicipios[ID_Projeto] ) ),
+        VAR ID_Atual = [ID_Projeto]
+        VAR TermosDesteID =
+            CALCULATETABLE (
+                VALUES ( 'BuscaIndice'[Keyword] ),
+                'BuscaIndice'[ID_Projeto] = ID_Atual,
+                ALL ( 'BuscaIndice'[Keyword] )
+            )
+        RETURN
+            NOT ( BuscaAtiva )
+                || COUNTROWS ( INTERSECT ( TermosDesteID, TermosPesquisados ) ) >= TotalTermosPesquisados
+    )
+
+VAR TitulosFinais =
+    CALCULATETABLE (
+        VALUES ( ProjetosCMunicipios[Título da proposta] ),
+        ProjetosCMunicipios[ID_Projeto] IN ID_selecionados_AND
+    )
+
+VAR MunicipiosFinais =
+    CALCULATETABLE (
+        VALUES ( ProjetosCMunicipios[Município] ),
+        ProjetosCMunicipios[ID_Projeto] IN ID_selecionados_AND
+    )
+
+VAR MunicipiosLimpos =
+    FILTER (
+        MunicipiosFinais,
+        NOT ISBLANK ( [Município] ) && LEN ( TRIM ( [Município] ) ) > 0
+    )
+
+VAR qAlysson    = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "Alysson Paolinelli" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qCompete    = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "COMPETE MINAS" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qPCTI       = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "PCTI" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qPesqEmp    = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "PESQUISADOR NA EMPRESA" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qProInov    = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "PRÓ-INOVAÇÃO" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qAmbientes  = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "AMBIENTES PROMOTORES DE INOVAÇÃO" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qMaturidade = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "INCREMENTO DA MATURIDADE" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qTriplice   = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "TRÍPLICE HÉLICE APL" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qParques    = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "PARQUES TECNOLÓGICOS" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qTecpop     = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "TECPOP" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qCientista  = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "Cientista Empreendedor" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qSEED       = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "Seed" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qEventech   = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "Eventech" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qCompeteEmp = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "Compete Minas - Empresas" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qComeToMinas= COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "Come To Minas" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qHubMg      = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "HubMG GOV" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qCdfResgate = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "Cidades do Futuro + Hub Resgates" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qCdf        = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "Cidades do Futuro" && [ID_Projeto] IN ID_selecionados_AND ) )
+VAR qLab        = COUNTROWS ( FILTER ( ProjetosCMunicipios, [Projeto] = "Laboratórios Certificadores" && [ID_Projeto] IN ID_selecionados_AND ) )
+
+VAR qDPD   = qAmbientes + qCientista + qLab + qParques + qTecpop
+VAR qDCTT  = qAlysson + qCompete + qMaturidade + qPCTI + qPesqEmp + qProInov + qTriplice
+VAR qDIPRO = qComeToMinas + qCompeteEmp + qEventech + qSEED
+VAR qDIAE  = qCdf + qCdfResgate + qHubMg
+
+VAR QuantidadeTotal = qDPD + qDCTT + qDIPRO + qDIAE
+
+-- ===================== DETALHES (CARTÕES) =====================
+-- Chaves data-k lidas pelo Excel/JS: mun, tit, num, area, coord, exec, valor
+
+VAR BtnCopiar = "<button class='cp' type='button' title='Copiar projeto'><svg width='13' height='13' viewBox='0 0 24 24'><use href='#icp'/></svg></button>"
+
+VAR DetalheAmbientes =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "AMBIENTES PROMOTORES DE INOVAÇÃO"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DPD' data-proj='Ambientes Promotores' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheCientista =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "CIENTISTA EMPREENDEDOR"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DPD' data-proj='Cientista Empreendedor' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheLab =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "LABORATÓRIOS CERTIFICADORES"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DPD' data-proj='Laboratórios Certificadores' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheParques =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "PARQUES TECNOLÓGICOS"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DPD' data-proj='Parques Tecnológicos' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheTecpop =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "TECPOP"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DPD' data-proj='Tecpop' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheAlysson =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "ALYSSON PAOLINELLI"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DCTT' data-proj='Alysson Paolinelli' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheCompete =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "COMPETE MINAS"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DCTT' data-proj='Compete Minas' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheMaturidade =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "INCREMENTO DA MATURIDADE"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DCTT' data-proj='Incremento da Maturidade' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalhePCTI =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "PCTI"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DCTT' data-proj='PCTI' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalhePesqEmp =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "PESQUISADOR NA EMPRESA"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DCTT' data-proj='Pesquisador na Empresa' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheProInov =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "PRÓ-INOVAÇÃO"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DCTT' data-proj='Pró-Inovação' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheTriplice =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "TRÍPLICE HÉLICE APL"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DCTT' data-proj='Tríplice Hélice' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheComeToMinas =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "COME TO MINAS"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DIPRO' data-proj='Come To Minas' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheCompeteEmp =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "COMPETE MINAS - EMPRESAS"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DIPRO' data-proj='Compete Minas - Empresas' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheEventech =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "EVENTECH"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DIPRO' data-proj='Eventech' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheSeed =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "SEED"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DIPRO' data-proj='Seed' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheCdfACT =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "CIDADES DO FUTURO"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DIAE' data-proj='Cidades do Futuro' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheCdfResgates =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "CIDADES DO FUTURO + HUB RESGATES"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DIAE' data-proj='Cidades do Futuro + Hub Resgates' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR DetalheHubMg =
+    CONCATENATEX (
+        FILTER (
+            ProjetosCMunicipios,
+            [Projeto] = "HUBMG GOV"
+                && [ID_Projeto] IN ID_selecionados_AND
+        ),
+        VAR vTit    = IF ( ISBLANK ( [Título da proposta] ) || [Título da proposta] = "", "Sem título identificado", [Título da proposta] )
+        VAR vMun    = IF ( ISBLANK ( [Município] ) || [Município] = "", "Não identificado", [Município] )
+        VAR vMeso   = IF ( ISBLANK ( [Mesorregião] ) || [Mesorregião] = "", "Não identificado", [Mesorregião] )
+        VAR vAno    = IF ( ISBLANK ( [Ano] ) || [Ano] = "" || [Ano] = "0", "Não identificado", "" & [Ano] )
+        VAR vAPQ    = IF ( ISBLANK ( [APQ] ) || [APQ] = "", "Não se aplica", [APQ] )
+        VAR vArea   = IF ( ISBLANK ( [Área de Conhecimento] ) || [Área de Conhecimento] = "", "Não identificado", [Área de Conhecimento] )
+        VAR vCoord  = IF ( ISBLANK ( [Coordenador] ) || [Coordenador] = "", "Não identificado", [Coordenador] )
+        VAR vExec   = IF ( ISBLANK ( [Executora] ) || [Executora] = "", "Não identificado", [Executora] )
+        VAR vOrgao  = IF ( ISBLANK ( [Órgão estadual (Nome)] ) || [Órgão estadual (Nome)] = "", "N/A", [Órgão estadual (Nome)] )
+        VAR vOrgaoHtml = IF ( vOrgao <> "N/A", "<div class='f'><b>Órgão Estadual</b><span data-k='orgao'>" & vOrgao & "</span></div>", "" )
+        VAR vConc   = [Valor Concedente]
+        VAR vApv    = [Valor Total Aprovado (com Contrapartida)]
+        VAR rRaw    = [Resumo]
+        VAR vResumo = IF ( ISBLANK ( rRaw ) || rRaw = "", "Não informado", IF ( rRaw = "NÃO SE APLICA", "Não se aplica", IF ( LEN ( rRaw ) > 100, LEFT ( rRaw, 97 ) & "...", rRaw ) ) )
+        RETURN
+            "<li class='card' data-dir='DIAE' data-proj='HubMG GOV' data-conc='" & FORMAT ( vConc, "0.00", "en-US" ) & "' data-apv='" & FORMAT ( vApv, "0.00", "en-US" ) & "'>" &
+                "<div class='card-h'><span class='card-t' data-k='tit'>" & vTit & "</span>" & BtnCopiar & "</div>" &
+                "<div class='grid'>" &
+                    "<div class='f'><b>Município</b><span data-k='mun'>" & vMun & "</span></div>" &
+                    "<div class='f'><b>Mesorregião</b><span data-k='meso'>" & vMeso & "</span></div>" &
+                    "<div class='f'><b>Ano</b><span data-k='ano'>" & vAno & "</span></div>" &
+                    "<div class='f'><b>Edital / APQ</b><span data-k='num'>" & vAPQ & "</span></div>" &
+                    "<div class='f'><b>Área</b><span data-k='area'>" & vArea & "</span></div>" &
+                    "<div class='f'><b>Coordenador(a)</b><span data-k='coord'>" & vCoord & "</span></div>" &
+                    "<div class='f full'><b>Executora / Proponente</b><span data-k='exec'>" & vExec & "</span></div>" &
+                    vOrgaoHtml &
+                "</div>" &
+                "<div class='val'>" &
+                    "<span>Valor Concedente</span><b data-k='valor'>" & FORMAT ( vConc, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                    "<span>Total c/ Contrapartida</span><b data-k='aprov'>" & FORMAT ( vApv, "R$ #,##0.00", "pt-BR" ) & "</b>" &
+                "</div>" &
+                "<div class='f full card-resumo'><b>Resumo</b><span data-k='resumo'>" & vResumo & "</span></div>" &
+            "</li>",
+        ""
+    )
+
+VAR ValorConcedente = [ValorConcedenteTotal]
+VAR ValorAprovado   = FORMAT ( CALCULATE ( SUM ( ProjetosCMunicipios[Valor Total Aprovado (com Contrapartida)] ), ProjetosCMunicipios[ID_Projeto] IN ID_selecionados_AND ), "R$ #,##0.00", "pt-BR" )
+VAR quantidadeCDF   = [quantidadeCDF]
+VAR QtdRenovacoes   = qCdf - quantidadeCDF
+
+-- ===================== CATÁLOGO DE PROGRAMAS (AGRUPADO POR DIRETORIA) =====================
+-- Colunas: Value1 ordem | Value2 nome | Value3 qtd | Value4 cor | Value5 fundo |
+--          Value6 texto | Value7 marcador | Value8 cartões | Value9 extra chip | Value10 diretoria
+VAR Programas =
+    {
+        -- DPD · Diretoria de Pesquisa e Desenvolvimento (Azul Institucional)
+        (  1, "Ambientes Promotores",             qAmbientes,   "#2563eb", "#f8fafc", "#0f172a", "", IF ( qAmbientes > 0,   DetalheAmbientes ),   "", "DPD" ),
+        (  2, "Cientista Empreendedor",           qCientista,   "#3b82f6", "#f8fafc", "#0f172a", "", IF ( qCientista > 0,   DetalheCientista ),   "", "DPD" ),
+        (  3, "Laboratórios Certificadores",      qLab,         "#1d4ed8", "#f8fafc", "#0f172a", "", IF ( qLab > 0,         DetalheLab ),         "", "DPD" ),
+        (  4, "Parques Tecnológicos",             qParques,     "#60a5fa", "#f8fafc", "#0f172a", "", IF ( qParques > 0,     DetalheParques ),     "", "DPD" ),
+        (  5, "Tecpop",                           qTecpop,      "#1e40af", "#f8fafc", "#0f172a", "", IF ( qTecpop > 0,      DetalheTecpop ),      "", "DPD" ),
+
+        -- DCTT · Diretoria de Ciência e Transferência de Tecnologia (Ciano / Petróleo)
+        (  6, "Alysson Paolinelli",               qAlysson,     "#0891b2", "#f8fafc", "#0f172a", "", IF ( qAlysson > 0,     DetalheAlysson ),     "", "DCTT" ),
+        (  7, "Compete Minas",                    qCompete,     "#0284c7", "#f8fafc", "#0f172a", "", IF ( qCompete > 0,     DetalheCompete ),     "", "DCTT" ),
+        (  8, "Incremento da Maturidade",         qMaturidade,  "#0e7490", "#f8fafc", "#0f172a", "", IF ( qMaturidade > 0,  DetalheMaturidade ),  "", "DCTT" ),
+        (  9, "PCTI",                             qPCTI,        "#06b6d4", "#f8fafc", "#0f172a", "", IF ( qPCTI > 0,        DetalhePCTI ),        "", "DCTT" ),
+        ( 10, "Pesquisador na Empresa",           qPesqEmp,     "#0369a1", "#f8fafc", "#0f172a", "", IF ( qPesqEmp > 0,     DetalhePesqEmp ),     "", "DCTT" ),
+        ( 11, "Pró-Inovação",                     qProInov,     "#22d3ee", "#f8fafc", "#0f172a", "", IF ( qProInov > 0,     DetalheProInov ),     "", "DCTT" ),
+        ( 12, "Tríplice Hélice",                  qTriplice,    "#155e75", "#f8fafc", "#0f172a", "", IF ( qTriplice > 0,    DetalheTriplice ),    "", "DCTT" ),
+
+        -- DIPRO · Diretoria de Inovação para o Setor Produtivo (Verde Esmeralda / Teal)
+        ( 13, "Come To Minas",                    qComeToMinas, "#0d9488", "#f8fafc", "#0f172a", "", IF ( qComeToMinas > 0, DetalheComeToMinas ), "", "DIPRO" ),
+        ( 14, "Compete Minas - Empresas",         qCompeteEmp,  "#059669", "#f8fafc", "#0f172a", "", IF ( qCompeteEmp > 0,  DetalheCompeteEmp ),  "", "DIPRO" ),
+        ( 15, "Eventech",                         qEventech,    "#14b8a6", "#f8fafc", "#0f172a", "", IF ( qEventech > 0,    DetalheEventech ),    "", "DIPRO" ),
+        ( 16, "Seed",                             qSEED,        "#10b981", "#f8fafc", "#0f172a", "", IF ( qSEED > 0,        DetalheSeed ),        "", "DIPRO" ),
+
+        -- DIAE · Diretoria de Inovação Aberta e Empreendedorismo Tecnológico (Índigo)
+        ( 17, "Cidades do Futuro",                qCdf,         "#4f46e5", "#f8fafc", "#0f172a", "", IF ( qCdf > 0,         DetalheCdfACT ),
+                "<small>&nbsp;·&nbsp;" & quantidadeCDF & " mun. (" & QtdRenovacoes & " renov.)</small>", "DIAE" ),
+        ( 18, "Cidades do Futuro + Hub Resgates", qCdfResgate,  "#6366f1", "#f8fafc", "#0f172a", "", IF ( qCdfResgate > 0,  DetalheCdfResgates ), "", "DIAE" ),
+        ( 19, "HubMG GOV",                        qHubMg,       "#818cf8", "#f8fafc", "#0f172a", "", IF ( qHubMg > 0,       DetalheHubMg ),       "", "DIAE" )
+    }
+
+VAR ProgramasAtivos = FILTER ( Programas, [Value3] > 0 )
+VAR QtdProgramas    = COUNTROWS ( ProgramasAtivos ) + 0
+VAR QtdMunicipios   = COUNTROWS ( MunicipiosLimpos ) + 0
+VAR QtdTotal        = QuantidadeTotal + 0
+
+VAR Chips =
+    CONCATENATEX (
+        ProgramasAtivos,
+        "<button class='chip' type='button' data-go='s" & [Value1] & "' data-dir='" & [Value10] & "'" &
+        " title='" & [Value10] & " · " & LOOKUPVALUE ( TabelaNumeros[Extenso], TabelaNumeros[Numero], [Value3] ) & "'" &
+        " style='--c:" & [Value4] & "'>" &
+        "<span class='chip-n'>" & [Value3] & "</span><span class='chip-l'>" & [Value2] & [Value9] & "</span></button>",
+        "", [Value1], ASC
+    )
+
+VAR Secoes =
+    CONCATENATEX (
+        ProgramasAtivos,
+        "<details class='sec' id='s" & [Value1] & "' data-dir='" & [Value10] & "' open style='--c:" & [Value4] & "'>" &
+            "<summary class='sh'>" &
+                "<span class='dir-b' data-d='" & [Value10] & "'>" & [Value10] & "</span>" &
+                "<span class='sec-t'>" & [Value2] & "</span>" &
+                "<span class='sec-val'></span>" &
+                "<span class='sec-n' data-total='" & [Value3] & "'>" & [Value3] & "</span>" &
+                "<span class='chev'><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2'><polyline points='6 9 12 15 18 9'/></svg></span>" &
+            "</summary>" &
+            "<ul class='cards'>" & [Value8] & "</ul>" &
+            IF ( [Value3] > 6, "<div class='sec-ft'><button type='button' class='vm-btn'><span>Ver todos os <b>" & [Value3] & "</b> projetos</span> <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2'><polyline points='6 9 12 15 18 9'/></svg></button></div>", "" ) &
+        "</details>",
+        "", [Value1], ASC
+    )
+
+VAR DadosJS =
+    "[" &
+    CONCATENATEX (
+        ProgramasAtivos,
+        "{n:'" & [Value2] & "',q:" & [Value3] & ",c:'" & [Value4] & "',s:'s" & [Value1] & "',d:'" & [Value10] & "'}",
+        ",", [Value1], ASC
+    ) &
+    "]"
+
+VAR BotoesDiretoria =
+    "<button type='button' class='dir on' data-dir=''>Todas <b>" & FORMAT ( QtdTotal, "#,##0", "pt-BR" ) & "</b></button>" &
+    IF ( qDPD > 0,   "<button type='button' class='dir' data-dir='DPD' style='--dc:#2563eb' title='Diretoria de Pesquisa e Desenvolvimento'><i class='dot'></i>DPD <b>" & FORMAT ( qDPD, "#,##0", "pt-BR" ) & "</b></button>", "" ) &
+    IF ( qDCTT > 0,  "<button type='button' class='dir' data-dir='DCTT' style='--dc:#0891b2' title='Diretoria de Ciência e Transferência de Tecnologia'><i class='dot'></i>DCTT <b>" & FORMAT ( qDCTT, "#,##0", "pt-BR" ) & "</b></button>", "" ) &
+    IF ( qDIPRO > 0, "<button type='button' class='dir' data-dir='DIPRO' style='--dc:#0d9488' title='Diretoria de Inovação para o Setor Produtivo'><i class='dot'></i>DIPRO <b>" & FORMAT ( qDIPRO, "#,##0", "pt-BR" ) & "</b></button>", "" ) &
+    IF ( qDIAE > 0,  "<button type='button' class='dir' data-dir='DIAE' style='--dc:#4f46e5' title='Diretoria de Inovação Aberta e Empreendedorismo Tecnológico'><i class='dot'></i>DIAE <b>" & FORMAT ( qDIAE, "#,##0", "pt-BR" ) & "</b></button>", "" )
+
+VAR TermosBox =
+    IF (
+        BuscaAtiva,
+        "<div class='box termos'><div class='sh'>Termos pesquisados <small>(todos presentes)</small></div><div class='chips'>" &
+        CONCATENATEX ( TermosPesquisados, "<span class='kw'>" & 'BuscaIndice'[Keyword] & "</span>", "", 'BuscaIndice'[Keyword], ASC ) &
+        "</div></div>",
+        ""
+    )
+
+-- ===================== ESTILO (CSS CLEAN INSTITUCIONAL + PAINEL INTEGRADO 3D) =====================
+
+-- ===================== ESTILO (CSS CLEAN INSTITUCIONAL + PAINEL INTEGRADO 3D) =====================
+VAR CSS = "
+#rp{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--bg:#f1f5f9;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;color:var(--ink);background:var(--bg);padding:8px 10px;box-sizing:border-box;min-height:100%;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+#rp *{box-sizing:border-box}
+#rp .hero{position:relative;display:flex;min-height:212px;border-radius:10px;overflow:hidden;color:#f8fafc;background:linear-gradient(135deg,#091929 0%,#0f2740 55%,#0a1d30 100%);border:1px solid #1e3a52;box-shadow:0 4px 14px rgba(15,23,42,.18);transition:min-height .22s ease}
+#rp.fs-3d .hero{position:fixed;inset:8px;z-index:9999;min-height:0;height:calc(100vh - 16px);border-radius:12px;box-shadow:0 20px 50px rgba(2,6,23,.75);border:1px solid #334155}
+#rp.fs-3d .bar,#rp.fs-3d .dash,#rp.fs-3d .area,#rp.fs-3d .topo{display:none!important}
+#rp .hero-info{flex:0 0 336px;padding:10px 14px;display:flex;flex-direction:column;gap:5px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;z-index:2;background:linear-gradient(90deg,rgba(9,25,41,.96) 80%,rgba(9,25,41,0));border-right:1px solid rgba(255,255,255,.07)}
+#rp.fs-3d .hero-info{flex:0 0 348px;background:rgba(9,25,41,.94);backdrop-filter:blur(8px)}
+#rp .eyebrow{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:9.5px;letter-spacing:.8px;text-transform:uppercase;color:#94a3b8;font-weight:600}
+#rp .fbadge{display:none;background:rgba(255,255,255,.12);color:#f8fafc;border:1px solid rgba(255,255,255,.22);border-radius:5px;padding:2px 7px;font-size:9.5px;font-weight:600;cursor:pointer;letter-spacing:.2px;font-family:inherit;transition:background .15s}
+#rp .fbadge:hover{background:rgba(255,255,255,.2)}
+#rp.tem-filtro .fbadge{display:inline-flex;align-items:center;gap:4px}
+#rp .geo-strip{display:grid;grid-template-columns:1fr 1fr;gap:5px;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.16);border-radius:6px;padding:5px 8px}
+#rp .geo-kpi{display:flex;flex-direction:column;gap:1px;min-width:0}
+#rp .geo-kpi span{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;font-weight:600}
+#rp .geo-kpi b{font-size:12.5px;color:#f8fafc;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rp .hero-kpis{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+#rp .hk{background:rgba(15,23,42,.65);border:1px solid rgba(148,163,184,.18);border-radius:6px;padding:5px 8px;display:flex;flex-direction:column;gap:2px}
+#rp .hk.val{grid-column:1 / -1;background:linear-gradient(135deg,rgba(15,23,42,.85),rgba(2,132,199,.15));border-color:rgba(56,189,248,.32);padding:5px 9px}
+#rp .hk.val.aprov{grid-column:1 / -1;background:linear-gradient(135deg,rgba(15,23,42,.85),rgba(13,148,136,.15));border-color:rgba(45,212,191,.32);padding:5px 9px}
+#rp .hk span{font-size:9.5px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+#rp .hk b{font-size:16px;color:#f8fafc;font-weight:800;line-height:1.1}
+#rp .hk.val b{font-size:15.5px;color:#38bdf8}
+#rp .hk.val.aprov b{font-size:15.5px;color:#2dd4bf}
+#rp .hk small{font-size:9px;color:#64748b;font-weight:500}
+#rp .fs-dirs{display:flex;flex-direction:column;gap:3px;margin-top:2px}
+#rp .fs-dirs-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;font-weight:700}
+#rp .fs-dirs-row{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+#rp .fs-dir{display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:4px 3px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(255,255,255,.06);color:#cbd5e1;border:1px solid rgba(255,255,255,.14);cursor:pointer;font-family:inherit;transition:all .15s}
+#rp .fs-dir:hover{background:rgba(255,255,255,.14);color:#fff}
+#rp .fs-dir.on{background:#0284c7;color:#fff;border-color:#38bdf8;box-shadow:0 0 10px rgba(2,132,199,.55)}
+#rp .fs-dir i{width:6px;height:6px;border-radius:50%;display:inline-block}
+#rp .hint{margin-top:auto;font-size:9px;color:#64748b;line-height:1.25}
+#rp .viz{flex:1;position:relative;min-height:212px;overflow:hidden}
+#rp.fs-3d .viz{min-height:0;height:100%}
+#rp #rp-3d{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+#rp .viz-top{position:absolute;left:10px;right:10px;top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;z-index:5;pointer-events:none}
+#rp .vmodes{display:inline-flex;background:rgba(15,23,42,.88);border:1px solid rgba(148,163,184,.28);border-radius:6px;padding:2px;pointer-events:auto;backdrop-filter:blur(6px);box-shadow:0 2px 8px rgba(0,0,0,.25)}
+#rp .vm{border:none;background:transparent;color:#94a3b8;padding:4px 9px;font-size:10px;font-weight:700;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:.2px;transition:all .14s}
+#rp .vm:hover{color:#fff}
+#rp .vm.on{background:#0284c7;color:#fff;box-shadow:0 1px 6px rgba(2,132,199,.45)}
+#rp .leg3d{display:inline-flex;align-items:center;gap:9px;background:rgba(15,23,42,.82);border:1px solid rgba(148,163,184,.22);border-radius:6px;padding:3px 9px;font-size:9.5px;color:#cbd5e1;pointer-events:auto;backdrop-filter:blur(6px)}
+#rp .leg3d span{display:inline-flex;align-items:center;gap:4px;font-weight:600}
+#rp .leg3d i{width:7px;height:7px;border-radius:2px;display:inline-block}
+#rp .vtools{position:absolute;right:10px;bottom:8px;display:flex;align-items:center;gap:4px;z-index:5}
+#rp .vt{display:inline-flex;align-items:center;justify-content:center;gap:5px;background:rgba(15,23,42,.88);border:1px solid rgba(148,163,184,.28);color:#e2e8f0;border-radius:5px;padding:4px 9px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .14s;backdrop-filter:blur(6px);white-space:nowrap;line-height:1}
+#rp .vt:hover{background:#0284c7;color:#fff;border-color:#38bdf8}
+#rp .vt svg{flex-shrink:0;display:block}
+#rp .vt:hover{background:#0284c7;color:#fff;border-color:#38bdf8}
+#rp .tip{position:absolute;z-index:10;pointer-events:none;background:rgba(9,25,41,.96);border:1px solid #38bdf8;box-shadow:0 8px 24px rgba(2,6,23,.55);border-radius:7px;padding:6px 10px;font-size:11px;color:#f8fafc;transform:translate(-50%,-125%);opacity:0;transition:opacity .12s,transform .12s;white-space:nowrap;backdrop-filter:blur(8px)}
+#rp .tip.on{opacity:1;transform:translate(-50%,-138%)}
+#rp .tip b{display:block;font-size:12px;color:#38bdf8;font-weight:700}
+#rp .tip em{display:inline-block;margin-left:6px;font-style:normal;font-size:9.5px;color:#94a3b8;font-weight:600}
+#rp .tip .tv{display:block;margin-top:2px;font-size:10.5px;color:#e2e8f0;font-weight:600}
+#rp .tip small{display:block;margin-top:3px;font-size:9.5px;color:#94a3b8}
+#rp .hero.sem3d .bars2d{display:flex}
+#rp .bars2d{display:none;position:absolute;inset:40px 10px 10px;flex-direction:column;gap:3px;overflow-y:auto;padding-right:4px}
+#rp .b2{display:grid;grid-template-columns:140px 1fr 34px;align-items:center;gap:8px;font-size:10px;color:#cbd5e1;cursor:pointer;padding:2px 4px;border-radius:4px;transition:background .12s}
+#rp .b2:hover{background:rgba(255,255,255,.08);color:#fff}
+#rp .b2 span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rp .b2 em{height:7px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;display:block}
+#rp .b2 i{height:100%;border-radius:3px;display:block}
+#rp .b2 b{text-align:right;font-size:10.5px;color:#f8fafc}
+
+#rp .bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0;background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 8px;box-shadow:0 1px 3px rgba(15,23,42,.05)}
+#rp .bar-l{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#rp .dir-group{display:flex;gap:3px;align-items:center}
+#rp .dir{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;font-size:10.5px;font-weight:600;border:1px solid var(--line);background:#fff;border-radius:5px;cursor:pointer;color:var(--ink);font-family:inherit;transition:all .12s}
+#rp .dir:hover{background:#f8fafc;border-color:#cbd5e1}
+#rp .dir.on{background:var(--dc,#0f172a);color:#fff;border-color:transparent;box-shadow:0 1px 4px rgba(15,23,42,.2)}
+#rp .dir i.dot{width:6px;height:6px;border-radius:50%;background:var(--dc,#64748b);display:inline-block}
+#rp .dir.on i.dot{background:#fff}
+#rp .dir b{font-weight:700;opacity:.9}
+#rp .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
+#rp .ord{padding:4px 7px;font-size:10.5px;border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--ink);cursor:pointer;font-family:inherit}
+#rp .bar-r{display:flex;align-items:center;gap:4px}
+#rp .btn{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;font-size:10.5px;font-weight:600;border:1px solid var(--line);background:#fff;border-radius:5px;cursor:pointer;color:var(--ink);font-family:inherit;transition:all .12s}
+#rp .btn:hover{background:#f8fafc;border-color:#cbd5e1}
+#rp .btn.prim{background:#0284c7;color:#fff;border-color:transparent}
+#rp .btn.prim:hover{background:#0369a1}
+#rp .btn.graf{background:#f0f9ff;color:#0284c7;border-color:#bae6fd}
+#rp .btn.graf:hover{background:#e0f2fe;border-color:#7dd3fc}
+#rp .btn.graf.on{background:#0284c7;color:#fff;border-color:#0284c7}
+
+#rp .subbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 2px 4px;font-size:11px}
+#rp .busca-wrap{position:relative;flex:1;max-width:320px}
+#rp .busca-i{position:absolute;left:7px;top:50%;transform:translateY(-50%);color:#94a3b8;pointer-events:none}
+#rp .q{width:100%;padding:4px 22px 4px 24px;border:1px solid var(--line);border-radius:5px;font-size:11px;outline:none;background:#fff;font-family:inherit}
+#rp .q:focus{border-color:#0284c7;box-shadow:0 0 0 2px rgba(2,132,199,.15)}
+#rp .q-x{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:none;background:transparent;cursor:pointer;color:#94a3b8;font-size:12px;padding:2px 4px;line-height:1;display:none}
+#rp.filtrando-txt .q-x{display:block}
+#rp .filter-tags{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
+#rp .ftag{display:inline-flex;align-items:center;gap:4px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .12s}
+#rp .ftag:hover{background:#bae6fd}
+#rp .cnt{font-size:11px;color:var(--mut);font-weight:600}
+
+#rp .gmodal{display:none;background:#fff;border:1px solid #bae6fd;border-radius:9px;padding:12px 14px;margin-bottom:10px;box-shadow:0 8px 24px rgba(2,132,199,.14)}
+#rp .gmodal.on{display:block}
+#rp .gm-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:8px;border-bottom:1px solid #f1f5f9;margin-bottom:8px}
+#rp .gm-title{font-size:12px;font-weight:700;color:#0f172a;display:inline-flex;align-items:center;gap:6px}
+#rp .gm-title small{font-weight:500;color:#64748b;font-size:10.5px}
+#rp .gm-close{border:none;background:transparent;color:#64748b;cursor:pointer;font-size:11px;font-weight:600;padding:3px 6px;border-radius:4px;font-family:inherit}
+#rp .gm-close:hover{background:#f1f5f9;color:#0f172a}
+#rp .gm-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+#rp .gm-kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:5px 8px;display:flex;flex-direction:column;gap:1px}
+#rp .gm-kpi span{font-size:9px;text-transform:uppercase;color:#64748b;font-weight:600;letter-spacing:.4px}
+#rp .gm-kpi b{font-size:12px;color:#0f172a;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rp .gm-body{display:block;width:100%}
+#rp .gm-chart{max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:5px}
+#rp .gm-bar-row{display:grid;grid-template-columns:195px 1fr 48px 145px;align-items:center;gap:12px;font-size:11px;cursor:pointer;padding:4px 8px;border-radius:5px;transition:background .12s,border .12s;border:1px solid transparent}
+#rp .gm-bar-row:hover{background:#f1f5f9}
+#rp .gm-bar-row.on{background:#e0f2fe;border:1px solid #0284c7;box-shadow:0 0 8px rgba(2,132,199,.25)}
+#rp .gm-bar-row.on span{color:#0369a1;font-weight:700}
+#rp .gm-bar-row span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#1e293b;font-weight:600}
+#rp .gm-bar-track{height:12px;background:#f1f5f9;border-radius:6px;overflow:hidden;position:relative}
+#rp .gm-bar-fill{height:100%;background:linear-gradient(90deg,#0284c7,#38bdf8);border-radius:6px;transition:width .25s ease}
+#rp .gm-bar-q{font-weight:700;color:#0f172a;text-align:right}
+#rp .gm-bar-v{font-size:10.5px;color:#64748b;text-align:right;white-space:nowrap}
+
+#rp .dash{margin-bottom:8px}
+#rp .dir-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+#rp .dcard{background:#fff;border:1px solid var(--line);border-radius:7px;padding:7px 9px;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 3px rgba(15,23,42,.04);border-top:3px solid var(--dc,#0f172a);transition:opacity .15s}
+#rp .dcard.off{opacity:.35}
+#rp .dcard-h{display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+#rp .dcard-t{font-size:11px;font-weight:800;color:var(--dc,#0f172a);letter-spacing:.3px}
+#rp .dcard-q{font-size:10px;font-weight:700;color:#64748b}
+#rp .dcard-v{font-size:11px;font-weight:700;color:#0f172a;line-height:1}
+#rp .dcard-m{display:flex;flex-direction:column;gap:2px;max-height:125px;overflow-y:auto;padding-right:2px}
+#rp .drow{display:grid;grid-template-columns:1fr 28px;align-items:center;gap:4px;font-size:10px;color:#334155;padding:2px 4px;border-radius:3px;cursor:pointer;border:none;background:transparent;text-align:left;font-family:inherit;width:100%}
+#rp .drow:hover{background:#f1f5f9}
+#rp .drow.zero{opacity:.45}
+#rp .drow span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rp .drow b{text-align:right;font-weight:700;color:#0f172a}
+#rp .obs-bar{margin-top:6px;background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #0284c7;border-radius:5px;padding:6px 9px;font-size:10px;color:#475569;line-height:1.4}
+#rp .obs-bar b{color:#0f172a}
+
+#rp .area{display:flex;flex-direction:column;gap:8px}
+#rp .box{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;box-shadow:0 1px 3px rgba(15,23,42,.04)}
+#rp .sh{font-size:11px;font-weight:500;color:var(--ink);display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;flex-wrap:nowrap;white-space:nowrap;padding:7px 11px}
+#rp .dir-b{display:inline-flex;align-items:center;justify-content:center;padding:1.5px 6px;border-radius:4px;font-size:9.5px;font-weight:700;letter-spacing:.3px;color:#fff;line-height:1.2;flex-shrink:0}
+#rp .dir-b[data-d='DPD']{background:#2563eb}
+#rp .dir-b[data-d='DCTT']{background:#0891b2}
+#rp .dir-b[data-d='DIPRO']{background:#0d9488}
+#rp .dir-b[data-d='DIAE']{background:#4f46e5}
+#rp .sh small{font-size:10px;font-weight:400;color:var(--mut)}
+#rp .sh .pill{background:#e2e8f0;color:var(--ink);border-radius:10px;padding:1px 6px;font-size:9.5px;font-weight:700}
+#rp .sh .chev{margin-left:auto;color:var(--mut);transition:transform .15s}
+#rp details[open] .sh .chev{transform:rotate(180deg)}
+#rp .mun-tools{padding:6px 0 4px}
+#rp .mun-q{width:100%;max-width:240px;padding:3px 7px;font-size:10px;border:1px solid var(--line);border-radius:4px;outline:none;font-family:inherit}
+#rp .mun-q:focus{border-color:#0284c7}
+#rp .mun-list{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px;max-height:120px;overflow-y:auto}
+#rp .mun{border:1px solid var(--line);background:#fff;border-radius:4px;padding:2px 6px;font-size:10px;color:var(--ink);cursor:pointer;font-family:inherit;transition:all .12s}
+#rp .mun:hover{background:#f1f5f9;border-color:#cbd5e1}
+#rp .mun.on{background:#0284c7;color:#fff;border-color:transparent;font-weight:700}
+#rp .mun.escondido{display:none}
+
+#rp .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+#rp .chip{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid;cursor:pointer;background:#fff;font-family:inherit;transition:opacity .12s}
+#rp .chip.fora{opacity:.35}
+#rp .chip b{font-weight:700}
+#rp .resumo{padding:7px 10px}
+#rp .resumo p{margin:0 0 5px;font-size:10.5px;color:var(--mut)}
+
+#rp .sec{border:1px solid var(--line);background:#fff;border-radius:8px;padding:0;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,.04);transition:opacity .15s}
+#rp .sec.vazio{display:none}
+#rp .sec-h{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:#fafafa;border-bottom:1px solid var(--line);cursor:pointer;user-select:none;gap:8px}
+#rp .sec-t{font-size:12px;font-weight:500;color:#0f172a;display:inline-flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#rp .sec-val{font-size:11px;font-weight:600;color:#0284c7;margin-left:auto;flex-shrink:0;white-space:nowrap}
+#rp .sec-n{background:#f1f5f9;border:1px solid #cbd5e1;color:#334155;border-radius:6px;padding:1.5px 7px;font-size:10px;font-weight:700;flex-shrink:0;white-space:nowrap;display:inline-flex;align-items:center}
+#rp .sh .chev{flex-shrink:0}
+#rp .sec-soval .sec-val{display:none}
+#rp .sec-chev{color:var(--mut);transition:transform .15s}
+#rp .sec[open] .sec-chev{transform:rotate(180deg)}
+#rp .cards{list-style:none;margin:0;padding:8px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px}
+#rp .card{border:1px solid var(--line);border-radius:6px;padding:7px 9px;display:flex;flex-direction:column;gap:5px;background:#fff;font-size:11px;position:relative}
+#rp .card.oculto{display:none}
+#rp .card-h{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
+#rp .card-t{font-weight:400;color:var(--ink);line-height:1.25;font-size:11px;flex:1}
+#rp .cp{border:none;background:transparent;cursor:pointer;color:var(--mut);padding:2px;border-radius:3px;line-height:1}
+#rp .cp:hover{background:#f1f5f9;color:var(--ink)}
+#rp .grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 6px}
+#rp .f{display:flex;flex-direction:column}
+#rp .f.full{grid-column:1 / -1}
+#rp .k{font-size:9px;text-transform:uppercase;color:var(--mut);letter-spacing:.3px}
+#rp .v{font-weight:600;color:var(--ink);word-break:break-word}
+#rp .val{display:flex;align-items:center;justify-content:space-between;padding-top:4px;border-top:1px dashed var(--line);margin-top:2px;font-size:10.5px}
+#rp .val b{color:#0284c7;font-weight:700}
+#rp .sec-ft{padding:6px 10px;border-top:1px solid var(--line);background:#fafafa;display:flex;justify-content:center}
+#rp .vm-btn{border:1px solid var(--line);background:#fff;border-radius:4px;padding:3px 10px;font-size:10px;font-weight:600;color:var(--mut);cursor:pointer;font-family:inherit}
+#rp .vm-btn:hover{background:#f1f5f9;color:var(--ink)}
+#rp .sec:not(.expand) .card:nth-child(n+7){display:none}
+#rp .sec.expand .vm-btn{color:#0284c7}
+
+#rp .empty{padding:24px;text-align:center;color:var(--mut);font-size:12px;background:#fff;border:1px dashed var(--line);border-radius:8px}
+#rp .total{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:700;color:var(--ink)}
+#rp .total b{color:#0284c7}
+#rp .topo{position:fixed;right:16px;bottom:16px;width:32px;height:32px;border-radius:50%;background:#0284c7;color:#fff;border:none;box-shadow:0 3px 10px rgba(2,132,199,.35);cursor:pointer;display:none;align-items:center;justify-content:center;font-size:14px;z-index:90}
+#rp .topo.on{display:flex}
+#rp .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(10px);background:rgba(15,23,42,.92);color:#fff;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.2);opacity:0;pointer-events:none;transition:all .18s;z-index:9999}
+#rp .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.rp-clip{position:fixed;left:-99999px;top:0;width:900px}"
+
+-- ===================== SCRIPT (INTERATIVIDADE + MAPA 3D + EXPORTAÇÃO WORD) =====================
+VAR JS = "
+(function(){
+var root=document.getElementById('rp');if(!root)return;
+function q(s,e){return (e||root).querySelector(s);}
+function qa(s,e){return Array.prototype.slice.call((e||root).querySelectorAll(s));}
+function norm(s){return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
+function fmtBRL(v){return (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+function scroller(){
+  var p=root.parentElement;
+  while(p&&p!==document.body){
+    var ov=window.getComputedStyle(p).overflowY;
+    if(ov==='auto'||ov==='scroll')return p;
+    p=p.parentElement;
+  }
+  return window;
+}
+function rolarPara(el,offset){
+  var sc=scroller(),off=(offset===undefined)?10:offset;
+  if(!el)return;
+  if(sc===window){
+    var y=el.getBoundingClientRect().top+window.pageYOffset-off;
+    if(window.scrollTo)window.scrollTo({top:Math.max(0,y),behavior:'smooth'});else window.scrollTop=Math.max(0,y);
+  }else{
+    var rEl=el.getBoundingClientRect(),rSc=sc.getBoundingClientRect();
+    var top=sc.scrollTop+(rEl.top-rSc.top)-off;
+    if(sc.scrollTo)sc.scrollTo({top:Math.max(0,top),behavior:'smooth'});else sc.scrollTop=Math.max(0,top);
+  }
+}
+var toastEl=q('.toast'),toastTimer=0;
+function toast(msg){
+  if(!toastEl)return;
+  toastEl.textContent=msg;toastEl.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){toastEl.classList.remove('on');},2600);
+}
+
+/* ---------------- DADOS GEOGRÁFICOS COMPACTOS DE MINAS GERAIS ---------------- */
+var MG_MESOS = [{'n':'Noroeste de Minas','c':[-0.78,-1.85],'p':[[-1.74,-0.51],[-1.82,-0.71],[-1.72,-0.92],[-1.78,-1.0],[-1.95,-1.01],[-1.98,-1.13],[-1.59,-1.52],[-1.71,-1.81],[-1.9,-1.97],[-1.77,-2.22],[-1.75,-2.43],[-1.28,-2.56],[-1.33,-2.8],[-1.42,-2.86],[-1.31,-3.08],[-1.41,-3.17],[-1.4,-3.34],[-1.32,-3.38],[-1.13,-3.31],[-1.0,-3.34],[-1.06,-3.59],[-0.99,-3.67],[-0.82,-3.57],[-0.79,-3.46],[-0.52,-3.48],[-0.5,-3.35],[-0.63,-3.2],[-0.59,-3.14],[-0.47,-3.26],[-0.27,-3.28],[-0.25,-3.16],[-0.14,-3.19],[-0.35,-3.01],[-0.14,-2.97],[-0.1,-2.73],[-0.35,-2.37],[-0.43,-2.34],[-0.52,-2.43],[-0.6,-2.24],[-0.74,-2.22],[-0.78,-2.14],[-0.44,-2.09],[-0.43,-1.93],[-0.53,-1.85],[-0.51,-1.78],[-0.41,-1.78],[-0.38,-1.67],[-0.26,-1.59],[-0.14,-1.61],[-0.05,-1.53],[-0.1,-1.44],[0.01,-1.38],[-0.1,-1.12],[0.07,-0.99],[-0.0,-0.92],[0.05,-0.86],[-0.02,-0.64],[0.24,-0.56],[0.26,-0.45],[0.18,-0.34],[-0.1,-0.22],[-0.18,-0.09],[-0.31,-0.1],[-0.37,0.02],[-0.75,-0.07],[-0.84,0.02],[-0.88,-0.06],[-1.39,-0.28],[-1.4,-0.36],[-1.55,-0.35],[-1.62,-0.62],[-1.74,-0.51]]},{'n':'Norte de Minas','c':[1.18,-2.01],'p':[[3.9,-2.69],[3.8,-2.56],[3.66,-2.53],[3.55,-2.4],[3.56,-2.28],[3.37,-2.25],[3.32,-2.06],[2.83,-1.98],[2.89,-1.84],[2.58,-1.66],[2.52,-1.48],[2.39,-1.46],[2.32,-1.31],[2.12,-1.19],[2.14,-1.11],[2.04,-1.13],[2.03,-1.0],[1.79,-0.98],[1.76,-0.8],[1.6,-0.62],[1.47,-0.8],[1.48,-0.92],[1.29,-1.09],[1.27,-0.91],[1.1,-0.85],[1.09,-0.64],[1.01,-0.61],[0.97,-0.48],[0.87,-0.5],[0.85,-0.6],[0.63,-0.41],[0.42,-0.49],[0.32,-0.61],[0.24,-0.56],[-0.02,-0.64],[0.05,-0.86],[-0.0,-0.92],[0.07,-0.99],[-0.1,-1.12],[0.01,-1.38],[-0.1,-1.44],[-0.05,-1.53],[-0.14,-1.61],[-0.26,-1.59],[-0.38,-1.67],[-0.41,-1.78],[-0.51,-1.78],[-0.53,-1.85],[-0.43,-1.93],[-0.44,-2.09],[-0.78,-2.14],[-0.74,-2.22],[-0.6,-2.24],[-0.52,-2.43],[-0.43,-2.34],[-0.35,-2.37],[-0.1,-2.73],[-0.14,-2.97],[-0.35,-3.01],[-0.14,-3.19],[-0.25,-3.16],[-0.27,-3.28],[-0.11,-3.44],[-0.0,-3.43],[0.23,-3.63],[0.35,-3.63],[0.8,-3.99],[1.17,-4.12],[1.58,-4.02],[1.49,-3.72],[1.82,-3.56],[2.16,-3.72],[2.38,-3.67],[2.85,-3.33],[3.02,-3.27],[3.11,-3.31],[3.18,-3.21],[3.46,-3.29],[3.88,-2.92],[3.9,-2.69]]},{'n':'Jequitinhonha','c':[3.23,-1.41],'p':[[3.9,-2.69],[4.08,-2.66],[4.25,-2.78],[4.33,-2.73],[4.39,-2.78],[4.44,-2.71],[4.5,-2.76],[4.63,-2.63],[4.73,-2.68],[4.79,-2.61],[4.95,-2.63],[5.0,-2.53],[5.25,-2.44],[5.3,-2.33],[5.24,-2.17],[5.1,-2.01],[5.07,-2.04],[5.01,-1.89],[4.89,-1.88],[4.84,-1.7],[4.93,-1.63],[4.75,-1.6],[4.61,-1.7],[4.36,-1.62],[4.29,-1.67],[4.22,-1.56],[3.91,-1.44],[3.89,-1.17],[3.58,-1.27],[3.5,-1.08],[3.28,-0.87],[3.06,-1.06],[3.0,-0.93],[3.07,-0.76],[3.02,-0.75],[2.83,-0.73],[2.78,-0.58],[2.45,-0.43],[2.34,-0.4],[2.25,-0.48],[2.14,-0.34],[2.09,-0.37],[2.07,-0.26],[1.9,-0.27],[1.75,-0.06],[1.86,0.13],[1.57,0.03],[1.38,0.09],[1.31,-0.0],[1.49,-0.07],[1.55,-0.17],[1.37,-0.21],[1.29,-0.34],[1.38,-0.36],[1.43,-0.49],[1.54,-0.52],[1.6,-0.62],[1.76,-0.8],[1.79,-0.98],[2.03,-1.0],[2.04,-1.13],[2.14,-1.11],[2.12,-1.19],[2.32,-1.31],[2.39,-1.46],[2.52,-1.48],[2.58,-1.66],[2.89,-1.84],[2.83,-1.98],[3.32,-2.06],[3.37,-2.25],[3.56,-2.28],[3.55,-2.4],[3.66,-2.53],[3.8,-2.56],[3.9,-2.69]]},{'n':'Vale do Mucuri','c':[3.99,-0.83],'p':[[3.02,-0.75],[3.07,-0.76],[3.0,-0.93],[3.06,-1.06],[3.28,-0.87],[3.5,-1.08],[3.58,-1.27],[3.89,-1.17],[3.91,-1.44],[4.22,-1.56],[4.29,-1.67],[4.36,-1.62],[4.61,-1.7],[4.75,-1.6],[4.64,-1.5],[4.65,-1.23],[4.57,-1.11],[4.96,-0.8],[5.0,-0.69],[4.91,-0.62],[4.95,-0.57],[4.67,-0.65],[4.5,-0.53],[4.33,-0.57],[4.43,-0.4],[4.32,-0.44],[4.16,-0.39],[4.04,-0.13],[3.95,-0.07],[3.91,-0.29],[3.61,-0.35],[3.59,-0.43],[3.68,-0.53],[3.56,-0.65],[3.35,-0.44],[3.22,-0.41],[3.01,-0.66],[3.02,-0.75]]},{'n':'Triângulo Mineiro/Alto Paranaíba','c':[-2.64,0.71],'p':[[-1.38,1.52],[-1.57,1.54],[-1.58,1.62],[-1.69,1.55],[-1.91,1.31],[-2.07,1.39],[-2.13,1.33],[-2.28,1.34],[-2.32,1.47],[-2.39,1.38],[-2.49,1.49],[-2.64,1.37],[-2.66,1.48],[-3.21,1.51],[-3.27,1.77],[-3.33,1.72],[-3.36,1.5],[-3.43,1.49],[-3.52,1.64],[-3.59,1.63],[-3.65,1.45],[-3.61,1.31],[-4.32,1.28],[-4.64,1.22],[-4.76,1.14],[-5.26,1.43],[-5.3,1.1],[-5.18,0.95],[-5.22,0.86],[-5.1,0.87],[-5.14,0.79],[-5.08,0.67],[-4.95,0.53],[-4.82,0.49],[-4.79,0.34],[-4.6,0.11],[-4.38,0.09],[-4.33,0.02],[-4.11,0.06],[-3.87,-0.08],[-3.73,0.06],[-3.56,-0.15],[-3.43,-0.15],[-3.3,-0.26],[-3.19,-0.19],[-2.95,-0.24],[-2.71,-0.18],[-2.67,-0.24],[-2.37,-0.07],[-2.06,-0.23],[-2.0,-0.36],[-1.74,-0.51],[-1.62,-0.62],[-1.55,-0.35],[-1.4,-0.36],[-1.39,-0.28],[-0.88,-0.06],[-0.84,0.02],[-0.75,-0.07],[-0.37,0.02],[-0.31,-0.1],[-0.18,-0.09],[-0.16,-0.01],[-0.24,0.17],[-0.17,0.23],[-0.47,0.98],[-0.63,1.03],[-0.65,1.17],[-1.02,1.21],[-1.12,1.29],[-1.12,1.39],[-1.28,1.37],[-1.29,1.48],[-1.39,1.47],[-1.38,1.52]]},{'n':'Central Mineira','c':[0.7,0.11],'p':[[1.6,-0.62],[1.54,-0.52],[1.43,-0.49],[1.38,-0.36],[1.29,-0.34],[1.37,-0.21],[1.55,-0.17],[1.49,-0.07],[1.31,-0.0],[1.38,0.09],[1.44,0.25],[1.38,0.32],[1.17,0.35],[0.94,0.56],[0.7,0.6],[0.54,0.85],[0.43,0.82],[0.48,1.05],[0.44,1.15],[0.32,1.16],[0.28,1.34],[-0.05,1.21],[0.07,1.37],[0.08,1.47],[-0.01,1.47],[-0.0,1.54],[-0.13,1.5],[-0.32,1.31],[-0.47,0.98],[-0.17,0.23],[-0.24,0.17],[-0.16,-0.01],[-0.18,-0.09],[-0.1,-0.22],[0.18,-0.34],[0.26,-0.45],[0.24,-0.56],[0.32,-0.61],[0.42,-0.49],[0.63,-0.41],[0.85,-0.6],[0.87,-0.5],[0.97,-0.48],[1.01,-0.61],[1.09,-0.64],[1.1,-0.85],[1.27,-0.91],[1.29,-1.09],[1.48,-0.92],[1.47,-0.8],[1.6,-0.62]]},{'n':'Metropolitana de Belo Horizonte','c':[1.81,0.87],'p':[[2.75,1.24],[2.59,1.36],[2.37,1.39],[2.26,1.53],[2.17,1.51],[2.16,1.73],[2.27,1.78],[1.94,1.87],[1.91,2.03],[1.79,2.06],[1.74,2.16],[1.45,2.23],[1.37,2.11],[0.98,2.02],[1.09,1.92],[1.06,1.83],[1.0,1.75],[0.84,1.8],[0.75,1.67],[0.86,1.51],[0.95,1.49],[0.9,1.36],[0.72,1.22],[0.66,1.24],[0.63,1.13],[0.48,1.05],[0.43,0.82],[0.54,0.85],[0.7,0.6],[0.94,0.56],[1.17,0.35],[1.38,0.32],[1.44,0.25],[1.38,0.09],[1.57,0.03],[1.86,0.13],[1.75,-0.06],[1.9,-0.27],[2.07,-0.26],[2.09,-0.37],[2.14,-0.34],[2.25,-0.48],[2.34,-0.4],[2.45,-0.43],[2.37,-0.33],[2.45,-0.2],[2.25,-0.18],[2.16,-0.09],[2.09,0.18],[2.17,0.37],[2.04,0.49],[2.15,0.53],[2.25,0.46],[2.37,0.54],[2.56,0.54],[2.51,0.55],[2.58,0.7],[2.55,0.77],[2.38,0.9],[2.27,0.8],[2.28,0.93],[2.41,1.11],[2.51,1.07],[2.51,1.15],[2.77,1.17],[2.81,1.11],[2.75,1.24]]},{'n':'Vale do Rio Doce','c':[3.2,0.47],'p':[[2.75,1.24],[2.81,1.11],[2.77,1.17],[2.51,1.15],[2.51,1.07],[2.41,1.11],[2.28,0.93],[2.27,0.8],[2.38,0.9],[2.55,0.77],[2.58,0.7],[2.51,0.55],[2.56,0.54],[2.37,0.54],[2.25,0.46],[2.15,0.53],[2.04,0.49],[2.17,0.37],[2.09,0.18],[2.16,-0.09],[2.25,-0.18],[2.45,-0.2],[2.37,-0.33],[2.45,-0.43],[2.78,-0.58],[2.83,-0.73],[3.02,-0.75],[3.01,-0.66],[3.22,-0.41],[3.35,-0.44],[3.56,-0.65],[3.68,-0.53],[3.59,-0.43],[3.61,-0.35],[3.91,-0.29],[3.95,-0.07],[4.04,-0.13],[4.2,-0.11],[4.17,0.05],[4.27,0.11],[4.3,0.22],[4.0,0.21],[3.99,0.26],[4.2,0.38],[4.15,0.45],[4.27,0.54],[4.3,0.69],[4.24,0.88],[4.17,0.86],[4.18,0.94],[4.06,1.04],[4.04,1.24],[3.93,1.29],[3.83,1.54],[3.7,1.34],[3.59,1.29],[3.46,1.34],[3.44,1.18],[3.15,1.37],[3.1,1.28],[2.94,1.28],[2.92,1.21],[2.75,1.24]]},{'n':'Oeste de Minas','c':[0.04,1.7],'p':[[0.1,2.36],[-0.13,2.23],[-0.27,2.04],[-0.5,1.88],[-0.66,1.89],[-0.73,1.83],[-0.85,1.87],[-0.92,1.74],[-1.38,1.52],[-1.39,1.47],[-1.29,1.48],[-1.28,1.37],[-1.12,1.39],[-1.12,1.29],[-1.02,1.21],[-0.65,1.17],[-0.63,1.03],[-0.47,0.98],[-0.32,1.31],[-0.13,1.5],[-0.0,1.54],[-0.01,1.47],[0.08,1.47],[0.07,1.37],[-0.05,1.21],[0.28,1.34],[0.32,1.16],[0.44,1.15],[0.48,1.05],[0.63,1.13],[0.66,1.24],[0.72,1.22],[0.9,1.36],[0.95,1.49],[0.86,1.51],[0.75,1.67],[0.84,1.8],[1.0,1.75],[1.06,1.83],[1.09,1.92],[0.98,2.02],[0.89,2.14],[0.7,2.15],[0.79,2.38],[0.67,2.52],[0.48,2.4],[0.36,2.4],[0.29,2.47],[0.23,2.36],[0.21,2.43],[0.16,2.34],[0.1,2.36]]},{'n':'Sul/Sudoeste de Minas','c':[-0.39,2.96],'p':[[-1.69,1.55],[-1.58,1.62],[-1.57,1.54],[-1.38,1.52],[-0.92,1.74],[-0.85,1.87],[-0.73,1.83],[-0.66,1.89],[-0.5,1.88],[-0.27,2.04],[-0.13,2.23],[0.1,2.36],[0.14,2.46],[0.05,2.58],[0.38,2.69],[0.39,2.89],[0.61,2.85],[0.76,2.9],[0.95,2.78],[1.15,2.87],[1.22,2.81],[1.31,2.99],[1.28,3.12],[1.4,3.2],[1.37,3.26],[1.26,3.24],[1.18,3.31],[1.21,3.46],[0.94,3.49],[0.05,3.86],[-0.02,3.8],[-0.2,3.86],[-0.2,3.79],[-0.25,3.79],[-0.23,3.86],[-0.35,3.92],[-0.25,3.96],[-0.32,4.06],[-0.41,4.07],[-0.44,4.02],[-0.65,4.12],[-0.66,4.05],[-0.86,4.09],[-0.84,3.96],[-0.97,3.9],[-0.89,3.87],[-0.9,3.75],[-1.15,3.64],[-1.2,3.53],[-1.09,3.37],[-1.2,3.31],[-1.1,3.26],[-1.17,3.09],[-1.01,2.87],[-1.0,2.74],[-1.15,2.64],[-1.48,2.69],[-1.61,2.27],[-1.69,2.19],[-1.56,1.97],[-1.61,1.84],[-1.74,1.77],[-1.69,1.55]]},{'n':'Campo das Vertentes','c':[0.97,2.52],'p':[[0.1,2.36],[0.16,2.34],[0.21,2.43],[0.23,2.36],[0.29,2.47],[0.36,2.4],[0.48,2.4],[0.67,2.52],[0.79,2.38],[0.7,2.15],[0.89,2.14],[0.98,2.02],[1.37,2.11],[1.45,2.23],[1.74,2.16],[1.83,2.24],[1.77,2.24],[1.81,2.35],[1.93,2.44],[1.9,2.53],[1.65,2.68],[1.71,2.77],[1.67,2.85],[1.53,2.77],[1.29,2.79],[1.42,2.91],[1.31,2.99],[1.22,2.81],[1.15,2.87],[0.95,2.78],[0.76,2.9],[0.61,2.85],[0.39,2.89],[0.38,2.69],[0.05,2.58],[0.14,2.46],[0.1,2.36]]},{'n':'Zona da Mata','c':[2.35,2.29],'p':[[1.21,3.46],[1.18,3.31],[1.26,3.24],[1.37,3.26],[1.4,3.2],[1.28,3.12],[1.31,2.99],[1.42,2.91],[1.29,2.79],[1.53,2.77],[1.67,2.85],[1.71,2.77],[1.65,2.68],[1.9,2.53],[1.93,2.44],[1.81,2.35],[1.77,2.24],[1.83,2.24],[1.74,2.16],[1.79,2.06],[1.91,2.03],[1.94,1.87],[2.27,1.78],[2.16,1.73],[2.17,1.51],[2.26,1.53],[2.37,1.39],[2.59,1.36],[2.75,1.24],[2.92,1.21],[2.94,1.28],[3.1,1.28],[3.15,1.37],[3.44,1.18],[3.46,1.34],[3.59,1.29],[3.7,1.34],[3.83,1.54],[3.5,1.54],[3.41,1.66],[3.46,1.76],[3.41,1.93],[3.45,1.96],[3.29,2.23],[3.13,2.27],[3.19,2.33],[3.07,2.46],[3.03,2.76],[2.92,2.88],[3.01,2.97],[2.19,3.35],[2.2,3.27],[1.99,3.24],[1.79,3.33],[1.6,3.3],[1.21,3.46]]}];
+var MG_MUNS = {'juiz de fora':[1.99,3.0,11],'uberlandia':[-2.68,0.32,4],'lavras':[0.43,2.53,10],'vicosa':[2.43,2.06,11],'belo horizonte':[1.43,1.28,6],'alfenas':[-0.47,2.7,9],'uberaba':[-2.35,1.11,4],'contagem':[1.32,1.28,6],'divinopolis':[0.54,1.48,8],'montes claros':[1.5,-1.75,1],'betim':[1.19,1.32,6],'itajuba':[-0.0,3.65,9],'itabira':[2.11,0.99,6],'araguari':[-2.59,0.07,4],'papagaios':[0.67,0.82,6],'catas altas':[1.94,1.42,6],'pedra dourada':[3.12,2.13,11],'dores do indaia':[-0.14,0.84,5],'nova lima':[1.52,1.33,6],'arcos':[-0.08,1.62,8],'consolacao':[-0.44,3.76,9],'lagoa santa':[1.47,1.0,6],'esmeraldas':[1.08,1.12,6],'juatuba':[1.05,1.3,6],'entre rios de minas':[1.31,1.98,6],'varginha':[0.02,2.82,9],'sete lagoas':[1.14,0.84,6],'sao joao del rei':[1.13,2.42,10],'ouro preto':[1.85,1.71,6],'florestal':[0.97,1.24,6],'patos de minas':[-1.01,0.01,4],'santa rita do sapucai':[-0.24,3.48,9],'diamantina':[1.75,-0.31,2],'conselheiro lafaiete':[1.58,1.97,6],'governador valadares':[3.32,0.26,7],'itauna':[0.83,1.42,8],'monte carmelo':[-1.94,0.14,4],'ouro preto - mg':[1.85,1.71,6],'para de minas':[0.8,1.21,6],'pocos de caldas':[-1.05,3.04,9],'pouso alegre':[-0.46,3.46,9],'sao joao del-rei - mg':[1.13,2.42,10],'sao sebastiao do paraiso':[-1.46,2.22,9],'visconde do rio bran':[2.47,2.3,11],'leopoldina':[2.66,2.8,11],'pitangui':[0.53,1.05,6],'caldas':[-0.89,3.17,9],'bambui':[-0.5,1.35,8],'carmo do paranaiba':[-0.82,0.4,4],'maria da fe':[0.07,3.53,9],'prudente de morais':[1.23,0.86,6],'araxa':[-1.41,0.96,4],'janauba':[2.03,-2.63,1],'felixlandia':[0.52,0.17,5],'sao sebastiao do anta':[3.28,0.87,7],'agua comprida':[-2.52,1.4,4],'sao joao del-rei':[1.13,2.42,10],'paula candido':[2.34,2.17,11],'acaiaca':[2.18,1.69,11],'acucena':[2.75,0.47,7],'agua boa':[2.9,-0.55,7],'aguas formosas':[4.28,-1.42,3],'alvarenga':[3.53,0.79,7],'antonio dias':[2.45,0.99,7],'araponga':[2.78,1.98,11],'ataleia':[4.11,-0.51,3],'bandeira':[4.63,-2.55,2],'bonito de minas':[0.66,-3.08,1],'botumirim':[2.31,-1.62,1],'bras pires':[2.09,2.22,11],'brasilandia de minas':[-0.53,-1.49,0],'buritizeiro':[0.46,-1.16,1],'cabeceira grande':[-1.55,-2.41,0],'cabo verde':[-0.89,2.74,9],'cachoeira de pajeu':[3.75,-2.47,2],'cajuri':[2.51,2.1,11],'canaa':[2.68,2.0,11],'caputira':[3.01,1.51,11],'carai':[3.56,-1.32,2],'caranaiba':[1.62,2.18,6],'carlos chagas':[4.44,-0.83,3],'casa grande':[1.44,2.1,6],'catuji':[3.73,-1.2,3],'cipotanea':[1.98,2.2,11],'coluna':[2.47,-0.33,7],'conselheiro pena':[3.77,0.56,7],'coracao de jesus':[1.03,-1.79,1],'crisolita':[4.3,-1.27,3],'cuparaque':[4.12,0.37,7],'diogo de vasconcelos':[2.13,1.81,6],'divino':[3.13,1.93,11],'divisa alegre':[3.89,-2.7,1],'engenheiro caldas':[3.23,0.61,7],'espinosa':[2.5,-3.48,1],'felicio dos santos':[2.09,-0.47,2],'franciscopolis':[3.26,-0.59,3],'goiabeira':[4.01,0.38,7],'grao mogol':[2.43,-1.91,1],'guaraciaba':[2.31,1.89,11],'imbe de minas':[3.3,0.97,7],'itamarandiba':[2.46,-0.68,2],'itaverava':[1.74,1.99,6],'itueta':[4.06,0.77,7],'joaima':[4.19,-1.82,2],'ladainha':[3.52,-0.9,3],'lagoa dos patos':[0.82,-1.51,1],'machacalis':[4.49,-1.42,3],'malacacheta':[3.2,-0.7,3],'montezuma':[2.8,-3.23,1],'naque':[2.96,0.62,7],'natalandia':[-0.99,-1.96,0],'ninheira':[3.5,-3.09,1],'nova resende':[-0.92,2.41,9],'novo cruzeiro':[3.39,-1.05,2],'novo oriente de minas':[4.01,-1.1,3],'novorizonte':[2.88,-2.43,1],'passa vinte':[1.14,3.4,9],'patis':[1.3,-2.37,1],'pavao':[4.22,-1.09,3],'pedra azul':[3.94,-2.44,2],'pedra do anta':[2.59,1.91,11],'pedralva':[-0.01,3.47,9],'pescador':[3.65,-0.21,7],'ponto dos volantes':[3.74,-1.73,2],'porteirinha':[2.3,-2.69,1],'raul soares':[2.84,1.44,11],'riachinho':[-0.51,-2.22,1],'rio vermelho':[2.31,-0.27,6],'rubelita':[3.02,-2.06,1],'salto da divisa':[5.21,-2.44,2],'santa efigenia de minas':[2.85,0.24,7],'santa helena de minas':[4.52,-1.55,3],'santa margarida':[3.03,1.71,11],'santa rita de minas':[3.14,1.23,7],'santa rita do itueto':[3.86,0.74,7],'santo antonio do itambe':[2.03,-0.11,6],'santo antonio do retiro':[2.68,-3.07,1],'sao geraldo da piedade':[3.0,0.24,7],'sao geraldo do baixio':[3.88,0.31,7],'sao goncalo do abaete':[-0.36,-0.23,0],'sao goncalo do rio preto':[1.95,-0.54,2],'sao joao das missoes':[1.29,-3.5,1],'sao jose da safira':[3.13,-0.24,7],'sao jose do jacuri':[2.63,-0.29,7],'sao roque de minas':[-0.87,1.58,8],'sao sebastiao do maranhao':[2.73,-0.47,7],'sao tome das letras':[0.47,3.0,9],'senador cortes':[2.37,3.05,11],'senhora do porto':[2.24,0.3,7],'serranopolis de minas':[2.44,-2.6,1],'simao pereira':[2.03,3.21,11],'sobralia':[3.18,0.62,7],'ubai':[0.64,-2.17,1],'umburatiba':[4.62,-1.25,3],'urucania':[2.57,1.68,11],'vieiras':[3.04,2.17,11],'virgem da lapa':[2.94,-1.68,2],'virgolandia':[2.98,-0.1,7],'bom despacho':[0.19,1.1,5],'caxambu':[0.49,3.22,9],'formiga':[-0.06,1.84,8],'congonhas':[1.51,1.82,6],'ipanema':[3.54,1.16,7],'aracuai':[3.2,-1.64,2],'sao lourenco':[0.38,3.35,9],'alagoa':[0.77,3.4,9],'sao bras do suacui':[1.42,1.94,6],'barao de cocais':[1.86,1.3,6],'barbacena':[1.59,2.51,10],'boa esperanca':[-0.11,2.38,9],'brazopolis':[-0.17,3.7,9],'caete':[1.69,1.23,6],'carmo do cajuru':[0.64,1.52,8],'cataguases':[2.61,2.66,11],'coronel xavier chaves':[1.16,2.32,10],'delfim moreira':[0.16,3.72,9],'guanhaes':[2.39,0.19,7],'guaxupe':[-1.19,2.58,9],'itabirito':[1.56,1.59,6],'itamonte':[0.55,3.51,9],'lagoa dourada':[1.3,2.21,10],'monsenhor paulo':[-0.08,3.01,9],'muzambinho':[-1.02,2.65,9],'paracatu':[-1.35,-1.28,0],'paraisopolis':[-0.31,3.77,9],'perdoes':[0.34,2.38,8],'pompeu':[0.49,0.61,5],'ponte nova':[2.41,1.74,11],'sacramento':[-1.88,1.22,4],'santa barbara':[1.89,1.38,6],'conceicao das alagoas':[-2.78,1.27,4],'santo antonio do monte':[0.15,1.43,8],'sarzedo':[1.24,1.38,6],'taiobeiras':[3.05,-2.62,1],'teofilo otoni':[3.74,-0.68,3],'tiradentes':[1.21,2.4,10],'tres coracoes':[0.19,2.95,9],'sabara':[1.56,1.24,6],'bela vista de minas':[2.24,1.19,6],'lambari':[0.1,3.22,9],'monte santo de minas':[-1.45,2.47,9],'baependi':[0.53,3.2,9],'ouro branco':[1.67,1.84,6],'dom vicoso':[0.28,3.48,9],'carmo de minas':[0.31,3.36,9],'conceicao do rio verde':[0.35,3.13,9],'pouso alto':[0.45,3.43,9],'liberdade':[1.07,3.27,9],'serranos':[0.89,3.14,9],'jesuania':[0.15,3.24,9],'soledade de minas':[0.39,3.3,9],'sao sebastiao do rio verde':[0.45,3.45,9],'itanhandu':[0.49,3.52,9],'aiuruoca':[0.8,3.22,9],'virginia':[0.34,3.56,9],'cruzilia':[0.61,3.09,9],'seritinga':[0.88,3.16,9],'mateus leme':[0.97,1.33,6],'campanha':[0.05,3.09,9],'cambuquira':[0.15,3.11,9],'mariana':[1.93,1.71,6],'campo belo':[0.17,2.2,8],'ipatinga':[2.76,0.84,7],'januaria':[1.03,-2.93,1],'extrema':[-0.82,4.05,9],'sao goncalo do rio abaixo':[1.98,1.18,6],'tres marias':[0.2,-0.35,5],'andradas':[-1.06,3.31,9],'santo antonio do amparo':[0.5,2.24,8],'jaguaracu':[2.56,1.01,7],'minduri':[0.8,2.94,9],'padre carvalho':[2.78,-2.1,1],'monte siao':[-1.06,3.65,9],'minas novas':[2.71,-1.29,2],'nova porteirinha':[2.04,-2.63,1],'matias cardoso':[1.45,-3.53,1],'itanhomi':[3.4,0.56,7],'periquito':[3.05,0.55,7],'pirapora':[0.48,-1.17,1],'rio piracicaba':[2.16,1.28,6],'toledo':[-0.87,3.95,9],'bocaiuva':[1.55,-1.39,1],'inhapim':[3.16,0.92,7],'pocrane':[3.61,0.99,7],'corrego do bom jesus':[-0.54,3.84,9],'nova serrana':[0.44,1.23,8],'timoteo':[2.66,0.95,7],'capitolio':[-0.57,1.93,9],'abaete':[-0.0,0.55,5],'nova era':[2.3,1.12,6],'irai de minas':[-1.9,0.38,4],'bicas':[2.27,2.98,11],'frutal':[-3.31,1.37,4],'perdigao':[0.35,1.3,8],'unai':[-1.37,-2.1,0],'guaraciama':[1.69,-1.48,1],'salinas':[3.1,-2.33,1],'lagoa da prata':[-0.09,1.37,5],'frei gaspar':[3.81,-0.49,3],'jenipapo de minas':[3.03,-1.42,2],'juruaia':[-1.07,2.53,9],'aracai':[1.14,0.59,6],'marmelopolis':[0.27,3.67,9],'cordislandia':[-0.24,3.05,9],'luminarias':[0.52,2.78,10],'guape':[-0.44,2.07,9],'curral de dentro':[3.42,-2.5,1],'ibituruna':[0.67,2.44,8],'mirai':[2.69,2.48,11],'inimutaba':[1.03,0.14,5],'chacara':[2.11,2.93,11],'astolfo dutra':[2.45,2.59,11],'jacinto':[4.89,-2.31,2],'planura':[-3.08,1.48,4],'setubinha':[3.12,-0.93,3],'ouro fino':[-0.87,3.51,9],'delfinopolis':[-1.33,1.67,9],'ubaporanga':[3.17,1.0,7],'raposos':[1.56,1.32,6],'barra longa':[2.28,1.61,11],'eugenopolis':[3.09,2.39,11],'taparuba':[3.63,1.12,7],'nova uniao':[1.77,1.05,6],'resplendor':[3.98,0.71,7],'itau de minas':[-1.23,2.05,9],'santana do jacare':[0.3,2.2,8],'oliveira':[0.59,2.01,8],'patrocinio do muriae':[3.07,2.44,11],'ibiai':[0.51,-1.63,1],'paiva':[1.93,2.57,11],'paraopeba':[0.99,0.66,6],'vespasiano':[1.45,1.06,6],'brumadinho':[1.19,1.48,6],'santa luzia':[1.52,1.13,6],'ituiutaba':[-3.8,0.37,4],'ibirite':[1.32,1.37,6],'machado':[-0.44,2.93,9],'lajinha':[3.63,1.49,11],'manhuacu':[3.24,1.59,11],'patrocinio':[-1.46,0.35,4],'carangola':[3.24,2.04,11],'claudio':[0.65,1.77,8],'santana do riacho':[1.65,0.56,6],'matias barbosa':[2.02,3.12,11],'guarani':[2.28,2.63,11],'itambacuri':[3.57,-0.51,7]};
+var ALIAS_MUN = {'belo horizonte':'belo horizonte','contagem':'contagem','betim':'betim','uberlandia':'uberlandia','juiz de fora':'juiz de fora','montes claros':'montes claros','uberaba':'uberaba','governador valadares':'governador valadares','pocos de caldas':'pocos de caldas','ipatinga':'ipatinga','divinopolis':'divinopolis','sete lagoas':'sete lagoas','vicosa':'vicosa','lavras':'lavras','ouro preto':'ouro preto','itajauba':'itajuba','itajuba':'itajuba','patos de minas':'patos de minas','pouso alegre':'pouso alegre','araxa':'araxa','varginha':'varginha','diamantina':'diamantina','barbacena':'barbacena','sao joao del rei':'sao joao del-rei','sao joao del-rei':'sao joao del-rei'};
+
+/* ---------------- ESTADO GLOBAL E ELEMENTOS ---------------- */
+var realce=null,dirsAtivas={},munAtivo='',munLabel='',mesoAtiva=-1,modo3D='mun',atualizarCena3D=null;
+function qtdDirs(){return Object.keys(dirsAtivas).length;}
+function dirOk(d){return qtdDirs()===0||Boolean(dirsAtivas[d]);}
+function dirAtivaSingle(){var k=Object.keys(dirsAtivas);return k.length===1?k[0]:null;}
+
+var inp=q('#rp-q'),cnt=q('#rp-cnt'),semRes=q('#rp-empty'),resumoTxt=q('#rp-rtxt'),totBar=q('#rp-tot'),ordSel=q('#rp-ord');
+var kProj=q('#rp-kp'),kProg=q('#rp-kg'),kMun=q('#rp-km'),kVal=q('#rp-kv'),kValLbl=q('#rp-kvl'),kSub=q('#rp-ks'),kApv=q('#rp-kav');
+var gMun=q('#rp-gmun'),gMeso=q('#rp-gmeso'),munTag=q('#rp-muntag'),mesoTag=q('#rp-mesotag');
+var muns=qa('.mun'),dirs=qa('.dir'),fsDirs=qa('.fs-dir'),chips=qa('.chip'),secs=qa('.sec'),cards=qa('.card');
+
+
+secs.forEach(function(s){atualizarPaginacaoSec(s,false);});
+var baseTotal=parseInt(root.getAttribute('data-total'),10)||cards.length;
+var baseProg=parseInt(root.getAttribute('data-progs'),10)||secs.length;
+var baseMun=parseInt(root.getAttribute('data-muns'),10)||muns.length;
+var baseValTxt=root.getAttribute('data-valor')||'R$ 0,00';
+var baseApvTxt=root.getAttribute('data-aprov')||'R$ 0,00';
+
+var munLabelMap={};
+muns.forEach(function(m){var r=m.getAttribute('data-mun')||'';munLabelMap[norm(r)]=r;});
+
+cards.forEach(function(li,idx){
+  var eMun=li.querySelector('[data-k=mun]'),eTit=li.querySelector('[data-k=tit]'),eVal=li.querySelector('[data-k=valor]');
+  li._mun=eMun?norm(eMun.textContent):'';
+  li._munRaw=eMun?eMun.textContent.trim():'';
+  if(li._mun&&!munLabelMap[li._mun])munLabelMap[li._mun]=li._munRaw;
+  var kAlias=ALIAS_MUN[li._mun]||li._mun,infoM=MG_MUNS[kAlias];
+  li._mi=(infoM!==undefined)?infoM[2]:-1;
+  li._tit=eTit?norm(eTit.textContent):'';
+  li._t=norm(li.textContent);
+  var rawConc=li.getAttribute('data-conc');
+  if(rawConc!==null){li._vc=parseFloat(rawConc)||0;}
+  else if(eVal){var mv=(eVal.textContent||'').replace(/[^0-9,-]/g,'').replace(',','.');li._vc=parseFloat(mv)||0;}
+  else{li._vc=0;}
+  li._v=li._vc;
+  var rawApv=li.getAttribute('data-apv');
+  li._va=(rawApv!==null)?(parseFloat(rawApv)||0):0;
+  li._d=li.getAttribute('data-dir')||'';
+  li._proj=li.getAttribute('data-proj')||'';
+  li._i=idx;
+});
+
+var somaPorSec={};
+cards.forEach(function(li){
+  var sec=li.closest('.sec');
+  if(sec){somaPorSec[sec.id]=(somaPorSec[sec.id]||0)+li._v;}
+});
+(window.RP_DATA||[]).forEach(function(d){d.v=somaPorSec[d.s]||0;});
+
+/* ---------- Painel de Matrizes das 4 Diretorias ---------- */
+var dirMeta=[
+  {d:'DPD',n:'Pesquisa e Desenvolvimento',cor:'#2563eb'},
+  {d:'DCTT',n:'Ciência e Transferência de Tecnologia',cor:'#0891b2'},
+  {d:'DIPRO',n:'Inovação para o Setor Produtivo',cor:'#0d9488'},
+  {d:'DIAE',n:'Inovação Aberta e Empreendedorismo',cor:'#4f46e5'}
+];
+
+function renderizarMatrizesDiretoria(contagemPorSec){
+  var box=q('#rp-dirgrid');if(!box)return;
+  var progs=window.RP_DATA||[];
+  box.innerHTML=dirMeta.map(function(dm){
+    var lista=progs.filter(function(p){return p.d===dm.d;});
+    var totD=0,valD=0;
+    var rows=lista.map(function(p){
+      var qv=(contagemPorSec&&contagemPorSec[p.s]!==undefined)?contagemPorSec[p.s]:p.q;
+      totD+=qv;
+      valD+=(p.v||0);
+      return '<button type=button class=\'drow'+(qv===0?' zero':'')+'\' data-go=\''+p.s+'\' title=\''+p.n+': '+qv+' projetos\'><span>'+p.n+'</span><b>'+qv+'</b></button>';
+    }).join('');
+    var on=dirOk(dm.d)?'':' off';
+    return '<div class=\'dcard'+on+'\' style=\'--dc:'+dm.cor+'\'><div class=dcard-h data-dir=\''+dm.d+'\' title=\'Filtrar diretoria '+dm.d+'\'><span class=dcard-t>'+dm.d+'</span><span class=dcard-q>'+totD+' proj.</span></div><div class=dcard-v>'+(valD>0?fmtBRL(valD):'—')+'</div><div class=dcard-m>'+rows+'</div></div>';
+  }).join('');
+}
+
+/* ---------- Painel Analítico por Município (Abrir Gráfico) ---------- */
+function atualizarGraficoMunicipios(){
+  var gm=q('#rp-gmodal');if(!gm||!gm.classList.contains('on'))return;
+  var agg={},totVis=0;
+  cards.forEach(function(li){
+    if(li.classList.contains('oculto'))return;
+    totVis++;
+    var m=li._mun||'nao identificado';
+    var raw=munLabelMap[m]||li._munRaw||'Não identificado';
+    if(!agg[m])agg[m]={m:m,raw:raw,q:0,v:0};
+    agg[m].q++;agg[m].v+=li._v;
+  });
+  var arr=Object.keys(agg).map(function(k){return agg[k];}).sort(function(a,b){return (b.q-a.q)||(b.v-a.v);});
+  var arrId=arr.filter(function(x){return x.m!=='nao identificado'&&x.m!=='municipio nao identificado';});
+  var arrVal=(arrId.length?arrId:arr).slice().sort(function(a,b){return b.v-a.v;});
+  var topQ=(arrId[0]||arr[0])||{raw:'—',q:0},topV=arrVal[0]||{raw:'—',v:0};
+  var k1=q('#gm-k1'),k2=q('#gm-k2'),k3=q('#gm-k3'),k4=q('#gm-k4');
+  if(k1)k1.textContent=totVis.toLocaleString('pt-BR')+' projetos';
+  if(k2)k2.textContent=(arrId.length||arr.length).toLocaleString('pt-BR')+' municípios';
+  if(k3)k3.textContent=topQ.raw+' ('+topQ.q+')';
+  if(k4)k4.textContent=topV.raw+' · '+fmtBRL(topV.v);
+
+  var ch=q('#gm-chart'),maxQ=arr.length?arr[0].q:1;
+  if(ch){
+    ch.innerHTML=arr.slice(0,35).map(function(x){
+      var pct=Math.max(2,Math.round(100*x.q/maxQ));
+      var isSel=Boolean(munAtivo&&norm(x.raw)===munAtivo);
+      return '<div class=\'gm-bar-row'+(isSel?' on':'')+'\' data-mun=\''+x.raw.replace(/'/g,'')+'\' title=\'Clique para filtrar '+x.raw+'\'>'+
+        '<span>'+x.raw+'</span>'+
+        '<div class=gm-bar-track><div class=gm-bar-fill style=\'width:'+pct+'%\'></div></div>'+
+        '<div class=gm-bar-q>'+x.q+'</div>'+
+        '<div class=gm-bar-v>'+(x.v>0?fmtBRL(x.v):'—')+'</div>'+
+      '</div>';
+    }).join('');
+  }
+}
+
+function sairTelaCheia(){
+  if(root.classList.contains('fs-3d')){
+    root.classList.remove('fs-3d');
+    var b=q('[data-act=fs3d]');if(b)b.innerHTML='<svg width=12 height=12 viewBox=\'0 0 24 24\' fill=none stroke=currentColor stroke-width=2.2 stroke-linecap=round stroke-linejoin=round><polyline points=\'15 3 21 3 21 9\'/><polyline points=\'9 21 3 21 3 15\'/><line x1=\'21\' y1=\'3\' x2=\'14\' y2=\'10\'/><line x1=\'3\' y1=\'21\' x2=\'10\' y2=\'14\'/></svg>Expandir 3D';
+    setTimeout(function(){if(window.__rpResize)window.__rpResize();},30);
+  }
+}
+
+function irPara(id){
+  sairTelaCheia();
+  var s=document.getElementById(id);if(!s)return;
+  s.open=true;rolarPara(s,12);
+  s.style.boxShadow='0 0 0 3px #0284c7';
+  setTimeout(function(){s.style.boxShadow='';},1200);
+}
+
+function ordenar(){
+  var modo=ordSel?ordSel.value:'padrao';
+  secs.forEach(function(s){
+    var ul=q('.cards',s);if(!ul)return;
+    var cs=qa('.card',ul);
+    cs.sort(function(a,b){
+      if(modo==='maior')return (b._v-a._v)||(a._i-b._i);
+      if(modo==='menor')return (a._v-b._v)||(a._i-b._i);
+      if(modo==='mun')return a._mun.localeCompare(b._mun,'pt-BR')||(b._v-a._v);
+      if(modo==='az')return a._tit.localeCompare(b._tit,'pt-BR')||(a._i-b._i);
+      return a._i-b._i;
+    });
+    cs.forEach(function(c){ul.appendChild(c);});
+    atualizarPaginacaoSec(s,root.classList.contains('tem-filtro'));
+  });
+}
+
+/* ---------- Filtro Universal (Diretoria + Município + Mesorregião + Busca) ---------- */
+
+function atualizarPaginacaoSec(s,temFiltro){
+  var cs=qa('.card:not(.oculto)',s);
+  var n=cs.length;
+  var ft=q('.sec-ft',s);
+  var btn=q('.vm-btn',s);
+  var isExp=s.classList.contains('expand');
+
+  if(n<=6){
+    if(ft)ft.style.display='none';
+    cs.forEach(function(c){c.classList.remove('oculto-extra');});
+  }else{
+    if(ft)ft.style.display='flex';
+    if(isExp){
+      if(btn)btn.innerHTML=""<span>Mostrar menos (6 primeiros)</span> <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2'><polyline points='18 15 12 9 6 15'/></svg>"";
+      cs.forEach(function(c){c.classList.remove('oculto-extra');});
+    }else{
+      var b=q('.sec-n',s);
+      var totOrig=b?(parseInt(b.getAttribute('data-total'),10)||n):n;
+      var txtTotal=temFiltro?(n+' projetos filtrados'):(totOrig+' projetos');
+      if(btn)btn.innerHTML=""<span>Ver todos os <b>""+txtTotal+""</b></span> <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2'><polyline points='6 9 12 15 18 9'/></svg>"";
+      cs.forEach(function(c,idx){
+        if(idx>=6)c.classList.add('oculto-extra');
+        else c.classList.remove('oculto-extra');
+      });
+    }
+  }
+}
+
+function filtrar(){
+  var termos=inp?norm(inp.value).split(/\s+/).filter(Boolean):[];
+  var temTxt=termos.length>0,temDir=(qtdDirs()>0&&qtdDirs()<4),temFiltro=Boolean(temDir||munAtivo||(mesoAtiva>=0)||temTxt);
+  var vis=0,somaVis=0,somaApv=0,munSet={},progVis=0,contagemPorSec={};
+
+  cards.forEach(function(li){
+    var ok=dirOk(li._d)&&(!munAtivo||li._mun===munAtivo)&&(mesoAtiva<0||li._mi===mesoAtiva)&&(!temTxt||termos.every(function(t){return li._t.indexOf(t)>-1;}));
+    li.classList.toggle('oculto',!ok);
+    if(ok){vis++;somaVis+=li._vc;somaApv+=li._va;if(li._mun)munSet[li._mun]=1;}
+  });
+
+  secs.forEach(function(s){
+    var cs=qa('.card:not(.oculto)',s),n=cs.length,sv=0;
+    cs.forEach(function(c){sv+=c._v;});
+    var b=q('.sec-n',s),vl=q('.sec-val',s);
+    var totOrig=parseInt(b?b.getAttribute('data-total'):n,10)||n;
+    contagemPorSec[s.id]=temFiltro?n:totOrig;
+    var esconder=temFiltro?(n===0):(false);
+    s.classList.toggle('vazio',esconder);
+    if(!esconder)progVis++;
+    if(b)b.textContent=temFiltro?n:totOrig;
+    if(vl){
+      if(sv>0){vl.textContent=fmtBRL(sv);s.classList.remove('sec-soval');}
+      else if(s.id==='s17'){vl.textContent='Acordo de Cooperação Técnica';s.classList.remove('sec-soval');}
+      else{vl.textContent='';s.classList.add('sec-soval');}
+    }
+    if((temTxt||munAtivo||mesoAtiva>=0)&&n>0&&n<=30)s.open=true;
+    atualizarPaginacaoSec(s,temFiltro);
+  });
+
+  chips.forEach(function(ch){
+    var id=ch.getAttribute('data-go'),sec=document.getElementById(id);
+    ch.classList.toggle('fora',Boolean(sec&&sec.classList.contains('vazio')));
+  });
+
+  muns.forEach(function(m){m.classList.toggle('on',Boolean(munAtivo&&norm(m.getAttribute('data-mun'))===munAtivo));});
+  dirs.concat(fsDirs).forEach(function(x){var d=x.getAttribute('data-dir');if(!d){x.classList.toggle('on',qtdDirs()===0);}else{x.classList.toggle('on',Boolean(dirsAtivas[d]));}});
+
+  if(munTag){
+    if(munAtivo){munTag.style.display='inline-flex';munTag.textContent='Município: '+munLabel+' ✕';}
+    else munTag.style.display='none';
+  }
+  if(mesoTag){
+    if(mesoAtiva>=0&&MG_MESOS[mesoAtiva]){mesoTag.style.display='inline-flex';mesoTag.textContent='Região: '+MG_MESOS[mesoAtiva].n+' ✕';}
+    else mesoTag.style.display='none';
+  }
+
+  /* atualiza indicadores geográficos do cabeçalho */
+  if(gMun){
+    if(munAtivo)gMun.textContent=munLabel;
+    else{var nM=temFiltro?Object.keys(munSet).length:baseMun;gMun.textContent=nM===1?Object.keys(munSet).map(function(k){return munLabelMap[k]||k;})[0]:('Todos ('+nM+')');}
+  }
+  if(gMeso){
+    if(mesoAtiva>=0&&MG_MESOS[mesoAtiva])gMeso.textContent=MG_MESOS[mesoAtiva].n;
+    else if(munAtivo){var kL=ALIAS_MUN[munAtivo]||munAtivo;var inf=MG_MUNS[kL];gMeso.textContent=(inf&&MG_MESOS[inf[2]])?MG_MESOS[inf[2]].n:'Minas Gerais';}
+    else gMeso.textContent='Todas as 12 regiões';
+  }
+
+  root.classList.toggle('filtrando-txt',temTxt);
+  root.classList.toggle('tem-filtro',temFiltro);
+  if(cnt)cnt.textContent=temFiltro?(vis.toLocaleString('pt-BR')+' / '+cards.length.toLocaleString('pt-BR')):cards.length.toLocaleString('pt-BR');
+  if(semRes)semRes.style.display=(temFiltro&&!vis)?'block':'none';
+
+  if(kProj)kProj.textContent=(temFiltro?vis:baseTotal).toLocaleString('pt-BR');
+  if(kProg)kProg.textContent=(temFiltro?progVis:baseProg).toLocaleString('pt-BR');
+  if(kMun)kMun.textContent=(temFiltro?Object.keys(munSet).length:baseMun).toLocaleString('pt-BR');
+  if(kVal)kVal.textContent=temFiltro?fmtBRL(somaVis):baseValTxt;
+  if(kValLbl)kValLbl.textContent=temFiltro?'Concedente (filtrado)':'Valor Concedente';
+  if(kSub)kSub.textContent=temFiltro?('Geral: '+baseValTxt):'';
+  if(kApv)kApv.textContent=temFiltro?fmtBRL(somaApv):baseApvTxt;
+  var kApvLbl=q('#rp-kavl');if(kApvLbl)kApvLbl.textContent=temFiltro?'Aprovado (filtrado)':'Total com Contrapartida';
+  var kApvSub=q('#rp-kas');if(kApvSub)kApvSub.textContent=temFiltro?('Geral: '+baseApvTxt):'Aporte global aprovado';
+  if(totBar)totBar.innerHTML=temFiltro?('<span>Soma dos cartões filtrados ('+vis.toLocaleString('pt-BR')+')</span><b>Concedente: '+fmtBRL(somaVis)+' · Total c/ Contrapartida: '+fmtBRL(somaApv)+' <small style=font-weight:400;opacity:.75>(Geral: '+baseValTxt+' / '+baseApvTxt+')</small></b>'):('<span>Valor Concedente Total: <b>'+baseValTxt+'</b></span><span>Total Aprovado (c/ Contrapartida): <b>'+baseApvTxt+'</b></span>');
+  if(resumoTxt)resumoTxt.innerHTML=temFiltro?('Exibindo <b>'+vis.toLocaleString('pt-BR')+'</b> de '+baseTotal.toLocaleString('pt-BR')+' projetos:'):('Distribuição dos <b>'+baseTotal.toLocaleString('pt-BR')+'</b> projetos por programa:');
+
+  renderizarMatrizesDiretoria(contagemPorSec);
+  atualizarGraficoMunicipios();
+  if(atualizarCena3D)atualizarCena3D();
+}
+
+var tm;
+if(inp){
+  inp.addEventListener('input',function(){clearTimeout(tm);tm=setTimeout(filtrar,100);});
+  inp.addEventListener('keydown',function(e){if(e.key==='Escape'){inp.value='';filtrar();}});
+}
+var munQ=q('#rp-munq');
+if(munQ){
+  munQ.addEventListener('input',function(){
+    var v=norm(munQ.value);
+    muns.forEach(function(m){m.classList.toggle('escondido',Boolean(v&&norm(m.textContent).indexOf(v)===-1));});
+  });
+}
+if(ordSel)ordSel.addEventListener('change',ordenar);
+
+/* ---------- Formatação Institucional e Cópia (Individual, Word e Excel) ---------- */
+function txtOf(el){return el?(el.textContent||'').trim():'';}
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function formatarProjetoTexto(card){
+  var tit=txtOf(card.querySelector('.card-t'))||'Sem título';
+  var proj=card.getAttribute('data-proj')||'';
+  var dir=card.getAttribute('data-dir')||'';
+  var getV=function(k){
+    var el=card.querySelector('[data-k='+k+']');
+    var v=el?txtOf(el):'';
+    return (v&&v!=='—'&&v!=='-')?v:'Não identificado';
+  };
+  var mun=getV('mun');
+  var meso=getV('meso');
+  var ano=getV('ano');
+  var num=getV('num');
+  var area=getV('area');
+  var coord=getV('coord');
+  var exec=getV('exec');
+  var orgao=getV('orgao');
+  var valConc=getV('valor');
+  var valApv=getV('aprov');
+  var resumo=getV('resumo');
+
+  var linhas=[];
+  linhas.push('PROPOSTA: '+tit);
+  linhas.push('--------------------------------------------------------------------------------');
+  if(proj)linhas.push('Programa: '+proj+(dir?' ('+dir+')':''));
+  if(mun&&mun!=='Não identificado')linhas.push('Município: '+mun);
+  if(meso&&meso!=='Não identificado')linhas.push('Mesorregião: '+meso);
+  if(ano&&ano!=='Não identificado')linhas.push('Ano: '+ano);
+  if(num&&num!=='Não identificado'&&num!=='Não se aplica')linhas.push('Edital / APQ: '+num);
+  if(area&&area!=='Não identificado')linhas.push('Área de Conhecimento: '+area);
+  if(coord&&coord!=='Não identificado')linhas.push('Coordenador(a): '+coord);
+  if(exec&&exec!=='Não identificado')linhas.push('Executora / Proponente: '+exec);
+  if(orgao&&orgao!=='Não identificado'&&orgao!=='N/A')linhas.push('Órgão Estadual: '+orgao);
+  if(valConc&&valConc!=='Não identificado')linhas.push('Valor Concedente: '+valConc);
+  if(valApv&&valApv!=='Não identificado')linhas.push('Total c/ Contrapartida: '+valApv);
+
+  if(resumo&&resumo!=='Não informado'&&resumo!=='Não se aplica'&&resumo!=='Não identificado'){
+    linhas.push('');
+    linhas.push('Resumo da Proposta:');
+    linhas.push(resumo);
+  }
+  return linhas.join('\r\n');
+}
+
+function formatarProjetoHtml(card){
+  var tit=txtOf(card.querySelector('.card-t'))||'Sem título';
+  var proj=card.getAttribute('data-proj')||'';
+  var dir=card.getAttribute('data-dir')||'';
+  var getV=function(k){
+    var el=card.querySelector('[data-k='+k+']');
+    var v=el?txtOf(el):'';
+    return (v&&v!=='—'&&v!=='-')?v:'Não identificado';
+  };
+  var mun=getV('mun');
+  var meso=getV('meso');
+  var ano=getV('ano');
+  var num=getV('num');
+  var area=getV('area');
+  var coord=getV('coord');
+  var exec=getV('exec');
+  var orgao=getV('orgao');
+  var valConc=getV('valor');
+  var valApv=getV('aprov');
+  var resumo=getV('resumo');
+
+  var h='<div style=""font-family:Segoe UI,Calibri,Arial,sans-serif;font-size:10pt;color:#1e293b;border:1px solid #cbd5e1;border-radius:6px;padding:10pt 12pt;margin-bottom:12pt;background:#ffffff;page-break-inside:avoid;"">';
+  h+='<h3 style=""margin:0 0 6pt;font-size:11.5pt;font-weight:400;color:#0f172a;border-bottom:2px solid #0284c7;padding-bottom:3pt;"">'+esc(tit)+'</h3>';
+  h+='<p style=""margin:0 0 6pt;line-height:1.5;"">';
+  if(proj)h+='<b>Programa:</b> '+esc(proj)+(dir?' ('+esc(dir)+')':'')+'<br>';
+  if(mun&&mun!=='Não identificado')h+='<b>Município:</b> '+esc(mun)+'<br>';
+  if(meso&&meso!=='Não identificado')h+='<b>Mesorregião:</b> '+esc(meso)+'<br>';
+  if(ano&&ano!=='Não identificado')h+='<b>Ano:</b> '+esc(ano)+'<br>';
+  if(num&&num!=='Não identificado'&&num!=='Não se aplica')h+='<b>Edital / APQ:</b> '+esc(num)+'<br>';
+  if(area&&area!=='Não identificado')h+='<b>Área de Conhecimento:</b> '+esc(area)+'<br>';
+  if(coord&&coord!=='Não identificado')h+='<b>Coordenador(a):</b> '+esc(coord)+'<br>';
+  if(exec&&exec!=='Não identificado')h+='<b>Executora / Proponente:</b> '+esc(exec)+'<br>';
+  if(orgao&&orgao!=='Não identificado'&&orgao!=='N/A')h+='<b>Órgão Estadual:</b> '+esc(orgao)+'<br>';
+  if(valConc&&valConc!=='Não identificado')h+='<b>Valor Concedente:</b> '+esc(valConc)+'<br>';
+  if(valApv&&valApv!=='Não identificado')h+='<b>Total c/ Contrapartida:</b> '+esc(valApv)+'<br>';
+  h+='</p>';
+  if(resumo&&resumo!=='Não informado'&&resumo!=='Não se aplica'&&resumo!=='Não identificado'){
+    h+='<div style=""margin-top:8pt;background:#f8fafc;padding:8pt 10pt;border-left:3px solid #0284c7;border-radius:4px;"">';
+    h+='<p style=""margin:0 0 4pt 0;font-weight:bold;color:#0369a1;font-size:10pt;"">Resumo da Proposta:</p>';
+    h+='<p style=""margin:0;line-height:1.5;color:#334155;font-size:9.5pt;"">'+esc(resumo)+'</p>';
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+function copiarClipboard(html,plain){
+  var ok=false;
+  var h=function(e){
+    try{
+      if(e.clipboardData){
+        e.clipboardData.setData('text/html',html);
+        e.clipboardData.setData('text/plain',plain);
+        e.preventDefault();
+        ok=true;
+      }
+    }catch(err){}
+  };
+  var aux=document.createElement('textarea');
+  aux.value=plain;
+  aux.className='rp-clip';
+  root.appendChild(aux);
+  aux.focus({preventScroll:true});
+  aux.select();
+  if(aux.setSelectionRange)aux.setSelectionRange(0,plain.length);
+  document.addEventListener('copy',h);
+  try{
+    var res=document.execCommand('copy');
+    if(res)ok=true;
+  }catch(err){}
+  document.removeEventListener('copy',h);
+  root.removeChild(aux);
+  return ok;
+}
+
+function copiarNo(no){
+  var plain=formatarProjetoTexto(no);
+  var html=formatarProjetoHtml(no);
+  return copiarClipboard(html,plain);
+}
+
+function copiarExcel(){
+  var cab=['Diretoria','Programa','Município','Mesorregião','Ano','Edital / APQ','Título da Proposta','Área de Conhecimento','Coordenador','Executora / Proponente','Órgão Estadual','Valor Concedente','Total com Contrapartida','Resumo'];
+  var ch=['mun','meso','ano','num','tit','area','coord','exec','orgao','valor','aprov','resumo'];
+  var tb=document.createElement('table');
+  tb.style.borderCollapse='collapse';
+  function cel(tag,txt){
+    var e=document.createElement(tag);
+    e.textContent=txt;
+    e.style.border='1px solid #cbd5e1';
+    e.style.padding='5px 8px';
+    if(tag==='th'){e.style.background='#0f172a';e.style.color='#ffffff';e.style.fontWeight='bold';}
+    return e;
+  }
+  var tr=document.createElement('tr');
+  cab.forEach(function(x){tr.appendChild(cel('th',x));});
+  tb.appendChild(tr);
+
+  var linhas=[cab.join('\t')],n=0;
+  qa('.sec:not(.vazio) .card:not(.oculto)').forEach(function(li){
+    var v=[li.getAttribute('data-dir')||'',li.getAttribute('data-proj')||''].concat(ch.map(function(k){
+      var e=li.querySelector('[data-k='+k+']');
+      return e?e.textContent.replace(/\s+/g,' ').trim():'';
+    }));
+    var r=document.createElement('tr');
+    v.forEach(function(x){r.appendChild(cel('td',x));});
+    tb.appendChild(r);
+    linhas.push(v.join('\t'));
+    n++;
+  });
+  var html=tb.outerHTML,plain=linhas.join('\r\n');
+  return copiarClipboard(html,plain)?n:-1;
+}
+
+function copiarWord(){
+  var Q=String.fromCharCode(39);
+  var F='font-family:Calibri,Arial,sans-serif;';
+  var hoje=new Date().toLocaleDateString('pt-BR');
+  var vis=0,somaConc=0,somaApv=0;
+  var filtros=[];
+  if(qtdDirs()>0&&qtdDirs()<4)filtros.push('Diretoria(s): '+Object.keys(dirsAtivas).join(', '));
+  if(munAtivo)filtros.push('Município: '+munLabel);
+  if(mesoAtiva>=0&&MG_MESOS[mesoAtiva])filtros.push('Mesorregião: '+MG_MESOS[mesoAtiva].n);
+  if(inp&&inp.value.trim())filtros.push('Busca: '+inp.value.trim());
+
+  var corpoHtml='';
+  var blocosPlain=[];
+
+  qa('.sec:not(.vazio)').forEach(function(s){
+    var cs=qa('.card:not(.oculto)',s);
+    if(!cs.length)return;
+    var nome=(q('.sec-t',s)||{textContent:''}).textContent.trim();
+    var dir=s.getAttribute('data-dir')||'';
+    var svConc=0,svApv=0;
+
+    var secHeader='================================================================================\r\n'+
+                  'PROGRAMA: '+nome+' ('+dir+') - '+cs.length+' projeto(s)\r\n'+
+                  '================================================================================';
+    blocosPlain.push(secHeader);
+
+    var blocoHtmlCards=cs.map(function(li,i){
+      svConc+=li._vc||0;
+      svApv+=li._va||0;
+      vis++;
+      blocosPlain.push((i+1)+'. '+formatarProjetoTexto(li));
+      return formatarProjetoHtml(li);
+    }).join('<hr style=""border:none;border-top:1px solid #cbd5e1;margin:12pt 0;"">');
+
+    somaConc+=svConc;
+    somaApv+=svApv;
+
+    var stH2=F+'font-size:13pt;color:#1F3864;margin:18pt 0 8pt;border-bottom:2px solid #1F3864;padding-bottom:3pt;';
+    var stSub='font-weight:normal;color:#595959;font-size:10.5pt;';
+    corpoHtml+='<h2 style='+Q+stH2+Q+'>'+esc(nome)+' <span style='+Q+stSub+Q+'>('+dir+' · '+cs.length+' projeto(s) · Concedente: '+fmtBRL(svConc)+' · Contrapartida: '+fmtBRL(svApv)+')</span></h2>'+blocoHtmlCards;
+  });
+
+  var stWrap=F+'color:#000;line-height:1.35;';
+  var stCab=F+'font-size:9.5pt;color:#595959;margin:0 0 2pt;';
+  var stH1=F+'font-size:16pt;color:#1F3864;margin:0 0 4pt;';
+  var stData=F+'font-size:10pt;color:#404040;margin:0 0 12pt;';
+  var stKpiBox=F+'background:#F2F4F8;border-left:4px solid #1F3864;padding:8pt 12pt;margin-bottom:16pt;';
+  var stKpiP=F+'font-size:10pt;margin:2pt 0;';
+  var stObs=F+'font-size:8.5pt;color:#595959;margin-top:16pt;border-top:1px solid #D9D9D9;padding-top:6pt;';
+
+  var html='<div style='+Q+stWrap+Q+'>'+
+    '<p style='+Q+stCab+Q+'>Governo do Estado de Minas Gerais · Secretaria de Estado de Desenvolvimento Econômico · SUBINOVA</p>'+
+    '<h1 style='+Q+stH1+Q+'>Relatório de Projetos por Programa</h1>'+
+    '<p style='+Q+stData+Q+'>Data de emissão: '+hoje+(filtros.length?' · Filtros aplicados: '+esc(filtros.join('; ')):' · Sem filtros locais aplicados')+'</p>'+
+    '<div style='+Q+stKpiBox+Q+'>'+
+      '<p style='+Q+stKpiP+Q+'><b>Total de Projetos Filtrados:</b> '+vis.toLocaleString('pt-BR')+'</p>'+
+      '<p style='+Q+stKpiP+Q+'><b>Valor Concedente (soma dos projetos filtrados):</b> '+fmtBRL(somaConc)+'</p>'+
+      '<p style='+Q+stKpiP+Q+'><b>Total com Contrapartida (soma dos projetos filtrados):</b> '+fmtBRL(somaApv)+'</p>'+
+      '<p style='+Q+stKpiP+Q+'><b>Valor Concedente Geral:</b> '+esc(baseValTxt)+'</p>'+
+      '<p style='+Q+stKpiP+Q+'><b>Total Aprovado com Contrapartida Geral:</b> '+esc(baseApvTxt)+'</p>'+
+    '</div>'+
+    corpoHtml+
+    '<p style='+Q+stObs+Q+'><b>Observação:</b> O valor contratado é superior ao solicitado devido à ausência de dados de solicitação em determinados editais e projetos. Os programas Pró-Inovação, PCTI e Incremento da Maturidade contabilizam exclusivamente valores contratados, e o valor total via TecPop foi rateado igualmente entre os municípios atendidos.</p>'+
+  '</div>';
+
+  var plainLinhas=[
+    'GOVERNO DO ESTADO DE MINAS GERAIS',
+    'SECRETARIA DE ESTADO DE DESENVOLVIMENTO ECONÔMICO - SUBINOVA',
+    'RELATÓRIO DE PROJETOS POR PROGRAMA',
+    'Data de emissão: '+hoje,
+    filtros.length?('Filtros aplicados: '+filtros.join('; ')):'Sem filtros locais aplicados',
+    'Total de projetos filtrados: '+vis.toLocaleString('pt-BR')+' | Concedente: '+fmtBRL(somaConc)+' | Total c/ Contrapartida: '+fmtBRL(somaApv),
+    '',
+    blocosPlain.join('\r\n\r\n================================================================================\r\n\r\n'),
+    '',
+    '================================================================================',
+    'Observação: O valor contratado é superior ao solicitado devido à ausência de dados de solicitação em determinados editais e projetos.'
+  ];
+  var plain=plainLinhas.join('\r\n');
+
+  return copiarClipboard(html,plain)?vis:-1;
+}
+
+/* ---------- eventos de clique ---------- */
+root.addEventListener('click',function(e){
+  var go=e.target.closest('[data-go]');
+  if(go){e.preventDefault();irPara(go.getAttribute('data-go'));return;}
+  var vm=e.target.closest('.vm');
+  if(vm){
+    e.preventDefault();
+    modo3D=vm.getAttribute('data-vm')||'mun';
+    qa('.vm').forEach(function(x){x.classList.toggle('on',x===vm);});
+    if(atualizarCena3D)atualizarCena3D(true);
+    return;
+  }
+  var db=e.target.closest('.dir,.fs-dir,.dcard-h');
+  if(db){
+    e.preventDefault();
+    var nv=db.getAttribute('data-dir')||'';
+    if(!nv){
+      dirsAtivas={};
+    }else{
+      if(dirsAtivas[nv]){
+        delete dirsAtivas[nv];
+      }else{
+        dirsAtivas[nv]=true;
+      }
+      if(qtdDirs()===4){
+        dirsAtivas={};
+      }
+    }
+    filtrar();return;
+  }
+  var mb=e.target.closest('[data-mun]');
+  if(mb){
+    e.preventDefault();
+    var raw=mb.getAttribute('data-mun')||'',nm=norm(raw);
+    if(munAtivo===nm){
+      munAtivo='';munLabel='';
+    }else{
+      munAtivo=nm;munLabel=raw;
+      if(mb.closest('#rp-gmodal')&&modo3D!=='mun'){
+        modo3D='mun';
+        qa('.vm').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-vm')==='mun');});
+      }
+    }
+    filtrar();return;
+  }
+  var vmBtn=e.target.closest('.vm-btn');
+  if(vmBtn){
+    e.preventDefault();
+    var s=vmBtn.closest('.sec');
+    if(s){
+      var exp=s.classList.toggle('expand');
+      atualizarPaginacaoSec(s,root.classList.contains('tem-filtro'));
+      if(!exp)rolarPara(s,10);
+    }
+    return;
+  }
+  var cp=e.target.closest('.cp');
+  if(cp){e.preventDefault();toast(copiarNo(cp.closest('.card'))?'Projeto copiado para a área de transferência':'Não foi possível copiar');return;}
+  var b=e.target.closest('[data-act]');if(!b)return;
+  var a=b.getAttribute('data-act');
+  if(a==='abrir'){
+    secs.forEach(function(s){
+      if(!s.classList.contains('vazio')){
+        s.open=true;
+        s.classList.add('expand');
+        atualizarPaginacaoSec(s,root.classList.contains('tem-filtro'));
+      }
+    });
+  } else if(a==='fechar'){
+    secs.forEach(function(s){
+      s.classList.remove('expand');
+      atualizarPaginacaoSec(s,root.classList.contains('tem-filtro'));
+      s.open=false;
+    });
+  }
+  else if(a==='texto'){var nw=copiarWord();toast(nw>=0?'Relatório formal copiado ('+nw+' projetos). Cole no Word com Ctrl+V':'Não foi possível copiar');}
+  else if(a==='excel'){var ne=copiarExcel();toast(ne>=0?ne+' registro(s) copiados para colar no Excel':'Não foi possível copiar');}
+  else if(a==='limpar')filtrar(inp.value='');
+  else if(a==='limpar-mun'){munAtivo='';munLabel='';filtrar();}
+  else if(a==='limpar-meso'){mesoAtiva=-1;filtrar();}
+  else if(a==='limpar-tudo'){dirsAtivas={};munAtivo='';munLabel='';mesoAtiva=-1;if(inp)inp.value='';filtrar();}
+  else if(a==='grafico'){
+    var gm=q('#rp-gmodal'),bg=q('[data-act=grafico]');
+    if(gm){var on=!gm.classList.contains('on');gm.classList.toggle('on',on);if(bg)bg.classList.toggle('on',on);if(on){atualizarGraficoMunicipios();rolarPara(gm,72);}}
+  }
+  else if(a==='fechar-grafico'){
+    var gm2=q('#rp-gmodal'),bg2=q('[data-act=grafico]');
+    if(gm2)gm2.classList.remove('on');if(bg2)bg2.classList.remove('on');
+  }
+  else if(a==='topo'){var sc=scroller();if(sc.scrollTo)sc.scrollTo({top:0,behavior:'smooth'});else sc.scrollTop=0;}
+  else if(a==='fs3d'){
+    var on=!root.classList.contains('fs-3d');
+    root.classList.toggle('fs-3d',on);
+    b.innerHTML=on?'<svg width=12 height=12 viewBox=\'0 0 24 24\' fill=none stroke=currentColor stroke-width=2.2 stroke-linecap=round stroke-linejoin=round><polyline points=\'4 14 10 14 10 20\'/><polyline points=\'20 10 14 10 14 4\'/><line x1=\'14\' y1=\'10\' x2=\'21\' y2=\'3\'/><line x1=\'3\' y1=\'21\' x2=\'10\' y2=\'14\'/></svg>Reduzir':'<svg width=12 height=12 viewBox=\'0 0 24 24\' fill=none stroke=currentColor stroke-width=2.2 stroke-linecap=round stroke-linejoin=round><polyline points=\'15 3 21 3 21 9\'/><polyline points=\'9 21 3 21 3 15\'/><line x1=\'21\' y1=\'3\' x2=\'14\' y2=\'10\'/><line x1=\'3\' y1=\'21\' x2=\'10\' y2=\'14\'/></svg>Expandir 3D';
+    setTimeout(function(){if(window.__rpResize)window.__rpResize();},30);
+  }
+  else if(a==='zin'&&window.__rpZoom)window.__rpZoom(-1.8);
+  else if(a==='zout'&&window.__rpZoom)window.__rpZoom(1.8);
+  else if(a==='zreset'&&window.__rpReset)window.__rpReset();
+});
+
+var topo=q('.topo');
+if(window.__rpScroll)window.removeEventListener('scroll',window.__rpScroll,true);
+window.__rpScroll=function(){var sc=scroller();if(topo&&sc)topo.classList.toggle('on',(sc.scrollTop||window.pageYOffset||0)>320);};
+window.addEventListener('scroll',window.__rpScroll,true);
+
+function grafico2D(){
+  var hero=q('.hero'),box=q('.bars2d');if(!hero||!box)return;
+  hero.classList.add('sem3d');if(box.childNodes.length)return;
+  var d=window.RP_DATA||[],max=Math.max.apply(null,d.map(function(x){return x.q;}).concat([1]));
+  d.forEach(function(x){
+    var row=document.createElement('div');row.className='b2';row.setAttribute('data-go',x.s);row.title=x.d+' · '+x.n+': '+x.q;
+    var s=document.createElement('span');s.textContent=x.n;
+    var em=document.createElement('em'),i=document.createElement('i');i.style.width=Math.max(2,Math.round(100*x.q/max))+'%';i.style.background=x.c;em.appendChild(i);
+    var b=document.createElement('b');b.textContent=x.q;
+    row.appendChild(s);row.appendChild(em);row.appendChild(b);box.appendChild(row);
+  });
+}
+
+/* ================================================================================================
+   VISUALIZAÇÃO 3D THREE.JS:
+   1. MAPA 3D DE MINAS GERAIS (Por Município e Por Região com Beacon Highlight e Camera Glide)
+   2. MATRIZ ARQUITETÔNICA 3D DAS 4 DIRETORIAS (Cidadela de Inovação 3D com torres dinâmicas)
+   ================================================================================================ */
+function iniciar3D(){
+  var T=window.THREE,hero=q('.hero'),cv=q('#rp-3d'),tip=q('#rp-tip'),dados=window.RP_DATA||[];
+  if(!T||!cv||!dados.length){grafico2D();return;}
+  if(window.__rp3d){try{window.__rp3d();}catch(err){}}
+  var ren;try{ren=new T.WebGLRenderer({canvas:cv,antialias:true,alpha:true});}catch(err){grafico2D();return;}
+  hero.classList.remove('sem3d');
+  var W=cv.clientWidth||520,H=cv.clientHeight||212;
+  ren.setPixelRatio(Math.min(window.devicePixelRatio||1,2));ren.setSize(W,H,false);
+  var cena=new T.Scene(),cam=new T.PerspectiveCamera(32,W/H,0.1,250);
+  cena.add(new T.AmbientLight(0xdbeafe,0.78));
+  var l1=new T.DirectionalLight(0xffffff,0.95);l1.position.set(8,16,11);cena.add(l1);
+  var l2=new T.DirectionalLight(0x38bdf8,0.42);l2.position.set(-10,8,-8);cena.add(l2);
+
+  var palco=new T.Group();cena.add(palco);
+  var grpMapa=new T.Group(),grpProgs=new T.Group();
+  palco.add(grpMapa);palco.add(grpProgs);
+
+  var corDir={DPD:0x2563eb,DCTT:0x0891b2,DIPRO:0x0d9488,DIAE:0x4f46e5};
+  var hexDir={DPD:'#2563eb',DCTT:'#0891b2',DIPRO:'#0d9488',DIAE:'#4f46e5'};
+
+  function criarSprite(txt,corBg,altBase){
+    var c=document.createElement('canvas');
+    var g=c.getContext('2d');
+    var font='700 24px Segoe UI, sans-serif';
+    g.font=font;
+    var metrics=g.measureText(txt);
+    var txtW=Math.ceil(metrics.width);
+    var padX=20;
+    var boxW=Math.max(76,txtW+padX*2);
+    var boxH=46;
+
+    c.width=boxW*2;
+    c.height=boxH*2;
+    g.scale(2,2);
+
+    if(corBg){
+      g.fillStyle='rgba(9,25,41,0.94)';
+      g.strokeStyle=corBg;
+      g.lineWidth=2.5;
+      var bx=2,by=2,bw=boxW-4,bh=boxH-4;
+      g.beginPath();
+      if(g.roundRect)g.roundRect(bx,by,bw,bh,7);
+      else g.rect(bx,by,bw,bh);
+      g.fill();
+      g.stroke();
+    }
+    g.font=font;
+    g.textAlign='center';
+    g.textBaseline='middle';
+    g.fillStyle='#f8fafc';
+    g.fillText(txt,boxW/2,boxH/2);
+
+    var tex=new T.CanvasTexture(c);
+    tex.minFilter=T.LinearFilter;
+    var s=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true,depthWrite:false}));
+    var h3D=altBase||0.32;
+    var w3D=h3D*(boxW/boxH);
+    s.scale.set(w3D,h3D,1);
+    return s;
+  }
+
+  /* 1) Construção do Mapa 3D de Minas Gerais (12 Mesorregiões extrudadas) */
+  var malhasMeso=[],bordasMeso=[];
+  MG_MESOS.forEach(function(ms,idx){
+    var sh=new T.Shape();
+    ms.p.forEach(function(pt,i){if(i===0)sh.moveTo(pt[0],-pt[1]);else sh.lineTo(pt[0],-pt[1]);});
+    var geo=new T.ExtrudeGeometry(sh,{depth:0.24,bevelEnabled:true,bevelSegments:1,steps:1,bevelSize:0.02,bevelThickness:0.02});
+    geo.rotateX(-Math.PI/2);
+    var mat=new T.MeshStandardMaterial({color:0x102a42,emissive:0x0ea5e9,emissiveIntensity:0.04,metalness:0.22,roughness:0.62,transparent:true,opacity:0.96});
+    var mesh=new T.Mesh(geo,mat);
+    mesh.userData={tipo:'meso',idx:idx,n:ms.n,c:ms.c,q:0,v:0,muns:0,hy:1};
+    grpMapa.add(mesh);malhasMeso.push(mesh);
+
+    var pts3=ms.p.map(function(pt){return new T.Vector3(pt[0],0.265,pt[1]);});
+    pts3.push(pts3[0].clone());
+    var lgeo=new T.BufferGeometry().setFromPoints(pts3);
+    var lmat=new T.LineBasicMaterial({color:0x38bdf8,transparent:true,opacity:0.48});
+    var line=new T.Line(lgeo,lmat);
+    grpMapa.add(line);bordasMeso.push(line);
+  });
+
+  var anelMapa=new T.Mesh(new T.RingGeometry(5.65,5.72,96),new T.MeshBasicMaterial({color:0x1e3a52,side:T.DoubleSide,transparent:true,opacity:0.45}));
+  anelMapa.rotation.x=Math.PI/2;anelMapa.position.y=-0.02;grpMapa.add(anelMapa);
+
+  var barrasMun=[],labelsMun=[];
+  var geoTorre=new T.BoxGeometry(0.26,1,0.26);geoTorre.translate(0,0.5,0);
+  var geoTorreMeso=new T.BoxGeometry(0.42,1,0.42);geoTorreMeso.translate(0,0.5,0);
+
+  function reconstruirMapa(){
+    barrasMun.forEach(function(b){grpMapa.remove(b);if(b.material)b.material.dispose();});
+    labelsMun.forEach(function(l){grpMapa.remove(l);if(l.material&&l.material.map)l.material.map.dispose();});
+    barrasMun=[];labelsMun=[];
+    malhasMeso.forEach(function(m){m.userData.q=0;m.userData.v=0;m.userData.muns=0;m.userData.porDir={DPD:0,DCTT:0,DIPRO:0,DIAE:0};});
+
+    var termos=inp?norm(inp.value).split(/\s+/).filter(Boolean):[];
+    var temTxt=termos.length>0;
+
+    var aggMun={};
+    cards.forEach(function(li){
+      var okBase=dirOk(li._d)&&(!temTxt||termos.every(function(t){return li._t.indexOf(t)>-1;}));
+      if(!okBase)return;
+      var k=ALIAS_MUN[li._mun]||li._mun;
+      var info=MG_MUNS[k];
+      if(!info)return;
+      var ms=malhasMeso[info[2]];
+      if(ms){ms.userData.q++;ms.userData.v+=li._v;if(ms.userData.porDir[li._d]!==undefined)ms.userData.porDir[li._d]++;}
+      if(mesoAtiva>=0&&info[2]!==mesoAtiva)return;
+      var entry=aggMun[k];
+      if(!entry){
+        entry=aggMun[k]={k:k,mun:li._mun,raw:munLabelMap[li._mun]||li._munRaw||k.toUpperCase(),x:info[0],z:info[1],mi:info[2],q:0,v:0,porDir:{DPD:0,DCTT:0,DIPRO:0,DIAE:0}};
+      }
+      entry.q++;entry.v+=li._v;
+      if(entry.porDir[li._d]!==undefined)entry.porDir[li._d]++;
+    });
+
+    var munsPorMeso={};
+    cards.forEach(function(li){
+      if(li.classList.contains('oculto')&&mesoAtiva<0&&!munAtivo)return;
+      var k=ALIAS_MUN[li._mun]||li._mun,info=MG_MUNS[k];
+      if(info){munsPorMeso[info[2]]=munsPorMeso[info[2]]||{};munsPorMeso[info[2]][k]=1;}
+    });
+    malhasMeso.forEach(function(m,idx){m.userData.muns=munsPorMeso[idx]?Object.keys(munsPorMeso[idx]).length:0;});
+
+    var maxMeso=Math.max.apply(null,malhasMeso.map(function(m){return m.userData.q;}).concat([1]));
+    malhasMeso.forEach(function(m,idx){
+      var r=m.userData.q/maxMeso;
+      var sel=(mesoAtiva===idx);
+      var sDir=dirAtivaSingle(),cBase=new T.Color(0x0c2136),cAtivo=new T.Color(sel?0x38bdf8:(sDir?(corDir[sDir]||0x0284c7):0x0369a1));
+      m.material.color.copy(cBase).lerp(cAtivo,sel?0.88:Math.min(0.82,0.16+Math.sqrt(r)*0.64));
+      m.material.emissiveIntensity=sel?0.28:(m.userData.q>0?(0.04+r*0.16):0.01);
+      m.userData.hAlvo=(modo3D==='meso')?(1+r*1.45):1;
+    });
+
+    if(modo3D==='mun'){
+      var lista=Object.keys(aggMun).map(function(k){return aggMun[k];});
+      lista.sort(function(a,b){return b.q-a.q;});
+      var maxMun=lista.length?lista[0].q:1;
+      var temMunSel=Boolean(munAtivo);
+      var munSelInfo=null;
+
+      lista.forEach(function(e,idx){
+        var isSel=(munAtivo&&e.mun===munAtivo);
+        if(isSel)munSelInfo=e;
+
+        var domDir='DPD',maxD=-1;
+        ['DPD','DCTT','DIPRO','DIAE'].forEach(function(d){if(dirOk(d)&&e.porDir[d]>maxD){maxD=e.porDir[d];domDir=d;}});
+        var sDir=dirAtivaSingle();
+        var hex=isSel?'#facc15':(sDir?(hexDir[sDir]||'#0284c7'):(hexDir[domDir]||'#0284c7'));
+        var cor=new T.Color(hex);
+
+        var hBase=0.28+2.45*Math.pow(e.q/maxMun,0.55);
+        var hAlvo=isSel?Math.max(2.5,hBase*1.5):(temMunSel?Math.max(0.12,hBase*0.35):hBase);
+        var wAlvo=isSel?1.6:(temMunSel?0.65:((e.q>=25)?1.25:((e.q>=5)?1.05:0.88)));
+        var opac=isSel?1.0:(temMunSel?0.22:0.96);
+        var emissiveInt=isSel?0.92:(temMunSel?0.06:0.28);
+
+        var mat=new T.MeshStandardMaterial({
+          color:cor,
+          emissive:isSel?0xfacc15:cor,
+          emissiveIntensity:emissiveInt,
+          metalness:0.18,
+          roughness:0.28,
+          transparent:true,
+          opacity:opac
+        });
+        var m=new T.Mesh(geoTorre,mat);
+        m.position.set(e.x,0.25,e.z);
+        m.scale.set(wAlvo,hAlvo,wAlvo);
+
+        var lb=null;
+        if(isSel){
+          lb=criarSprite(e.raw+' ('+e.q+')','#facc15',0.44);
+          lb.position.set(e.x,0.25+hAlvo+0.42,e.z);
+          grpMapa.add(lb);labelsMun.push(lb);
+        }else if(!temMunSel&&idx<6){
+          lb=criarSprite(e.q.toLocaleString('pt-BR'),hex);
+          lb.position.set(e.x,0.25+hAlvo+0.26,e.z);
+          grpMapa.add(lb);labelsMun.push(lb);
+        }
+        m.userData={tipo:'mun',e:e,h:hAlvo,hy:hAlvo,w:wAlvo,s:wAlvo,c:hex,dom:domDir,lb:lb,isSel:isSel};
+        grpMapa.add(m);barrasMun.push(m);
+      });
+
+      if(temMunSel&&munSelInfo){
+        var mesoIdx=munSelInfo.mi;
+        if(mesoIdx!==undefined&&malhasMeso[mesoIdx]){
+          malhasMeso[mesoIdx].material.color.setHex(0x0284c7);
+          malhasMeso[mesoIdx].material.emissive.setHex(0x38bdf8);
+          malhasMeso[mesoIdx].material.emissiveIntensity=0.45;
+          malhasMeso[mesoIdx].userData.hAlvo=1.65;
+        }
+        panAlvoX=munSelInfo.x;panAlvoZ=munSelInfo.z;distAlvo=8.5;elevAlvo=0.62;
+      }else{
+        panAlvoX=0.35;panAlvoZ=0.45;distAlvo=11.2;elevAlvo=0.66;
+      }
+    }else if(modo3D==='meso'){
+      malhasMeso.forEach(function(ms,idx){
+        var u=ms.userData;if(!u.q)return;
+        var domDir='DPD',maxD=-1;
+        ['DPD','DCTT','DIPRO','DIAE'].forEach(function(d){if(dirOk(d)&&u.porDir[d]>maxD){maxD=u.porDir[d];domDir=d;}});
+        var sDir=dirAtivaSingle();
+        var hex=sDir?(hexDir[sDir]||'#0284c7'):(hexDir[domDir]||'#0284c7');
+        var cor=new T.Color(hex);
+        var hAlvo=0.22+1.88*Math.pow(u.q/maxMeso,0.52);
+        var mat=new T.MeshStandardMaterial({color:cor,emissive:cor,emissiveIntensity:0.32,metalness:0.18,roughness:0.28,transparent:true,opacity:0.96});
+        var m=new T.Mesh(geoTorreMeso,mat);
+        var yBase=0.24*u.hAlvo;
+        m.position.set(u.c[0],yBase,u.c[1]);
+        m.scale.set(1,hAlvo,1);
+        var lb=criarSprite(u.q.toLocaleString('pt-BR'),hex);
+        lb.position.set(u.c[0],yBase+hAlvo+0.28,u.c[1]);
+        grpMapa.add(lb);labelsMun.push(lb);
+        m.userData={tipo:'meso-bar',idx:idx,n:u.n,q:u.q,v:u.v,muns:u.muns,porDir:u.porDir,h:hAlvo,hy:hAlvo,yBase:yBase,w:1,s:1,c:hex,lb:lb};
+        grpMapa.add(m);barrasMun.push(m);
+      });
+      panAlvoX=0.35;panAlvoZ=0.45;distAlvo=11.2;elevAlvo=0.66;
+    }
+  }
+
+  /* 2) Construção da Matriz Arquitetônica 3D das 4 Diretorias (Cidadela de Inovação 3D) */
+  var DIR_CONFIG = [
+    { d: 'DPD',   nome: 'Pesquisa e Desenvolvimento',               cor: '#2563eb', x: -4.4, z: -3.0, w: 5.2, h: 3.4 },
+    { d: 'DCTT',  nome: 'Ciência e Transferência de Tecnologia',     cor: '#0284c7', x:  4.4, z: -3.0, w: 6.0, h: 3.4 },
+    { d: 'DIPRO', nome: 'Inovação para o Setor Produtivo',          cor: '#0d9488', x: -4.4, z:  2.8, w: 5.2, h: 3.0 },
+    { d: 'DIAE',  nome: 'Inovação Aberta e Empreendedorismo',       cor: '#4f46e5', x:  4.4, z:  2.8, w: 5.2, h: 3.0 }
+  ];
+
+  var barrasProg=[],labelsProg=[],podiumsProg=[];
+  var geoHex=new T.CylinderGeometry(0.38,0.44,1,6);geoHex.translate(0,0.5,0);
+
+  function reconstruirProgs(){
+    barrasProg.forEach(function(b){grpProgs.remove(b);if(b.material)b.material.dispose();});
+    labelsProg.forEach(function(l){grpProgs.remove(l);if(l.material&&l.material.map)l.material.map.dispose();});
+    podiumsProg.forEach(function(p){grpProgs.remove(p);if(p.material)p.material.dispose();});
+    barrasProg=[];labelsProg=[];podiumsProg=[];
+
+    var stats={};
+    (window.RP_DATA||[]).forEach(function(p){
+      stats[p.s]={s:p.s,n:p.n,d:p.d,c:p.c,q:0,v:0};
+    });
+
+    var termos=inp?norm(inp.value).split(/\s+/).filter(Boolean):[];
+    var temTxt=termos.length>0;
+
+    cards.forEach(function(li){
+      var ok=dirOk(li._d)&&(!munAtivo||li._mun===munAtivo)&&(mesoAtiva<0||li._mi===mesoAtiva)&&(!temTxt||termos.every(function(t){return li._t.indexOf(t)>-1;}));
+      if(ok){
+        var s=li.closest('.sec');
+        if(s&&stats[s.id]){
+          stats[s.id].q++;
+          stats[s.id].v+=(li._v||0);
+        }
+      }
+    });
+
+    var maxP=1;
+    Object.keys(stats).forEach(function(k){if(stats[k].q>maxP)maxP=stats[k].q;});
+
+    /* Hub central iluminado */
+    var hubGeo=new T.CylinderGeometry(1.35,1.45,0.14,48);
+    var hubMat=new T.MeshStandardMaterial({color:0x0f2740,metalness:0.35,roughness:0.5});
+    var hub=new T.Mesh(hubGeo,hubMat);
+    hub.position.set(0,-0.07,-0.1);
+    grpProgs.add(hub);podiumsProg.push(hub);
+
+    var hubRing=new T.Mesh(new T.RingGeometry(1.55,1.62,64),new T.MeshBasicMaterial({color:0x38bdf8,side:T.DoubleSide,transparent:true,opacity:0.65}));
+    hubRing.rotation.x=Math.PI/2;hubRing.position.set(0,0.01,-0.1);
+    grpProgs.add(hubRing);podiumsProg.push(hubRing);
+
+    DIR_CONFIG.forEach(function(dm){
+      var isDirAtiva=dirOk(dm.d);
+      var podOpac=isDirAtiva?0.95:0.22;
+
+      var podGeo=new T.BoxGeometry(dm.w,0.16,dm.h);
+      var podMat=new T.MeshStandardMaterial({
+        color:isDirAtiva?0x0c2136:0x08131e,
+        metalness:0.28,
+        roughness:0.55,
+        transparent:true,
+        opacity:podOpac
+      });
+      var pod=new T.Mesh(podGeo,podMat);
+      pod.position.set(dm.x,-0.08,dm.z);
+      grpProgs.add(pod);podiumsProg.push(pod);
+
+      var edges=new T.EdgesGeometry(podGeo);
+      var wireMat=new T.LineBasicMaterial({
+        color:new T.Color(dm.cor),
+        transparent:true,
+        opacity:isDirAtiva?0.85:0.2
+      });
+      var wire=new T.LineSegments(edges,wireMat);
+      wire.position.copy(pod.position);
+      grpProgs.add(wire);podiumsProg.push(wire);
+
+      var progsInDir=(window.RP_DATA||[]).filter(function(p){return p.d===dm.d;});
+      var nProgs=progsInDir.length;
+      var cols=(nProgs>5)?4:((nProgs>3)?3:nProgs);
+
+      var dirTotQ=0,dirTotV=0;
+
+      progsInDir.forEach(function(p,i){
+        var st=stats[p.s]||{q:0,v:0};
+        dirTotQ+=st.q;
+        dirTotV+=st.v;
+
+        var r=(nProgs>3)?Math.floor(i/cols):0;
+        var c=(nProgs>3)?(i%cols):i;
+        var totalInRow=(r===0&&nProgs>3)?Math.min(cols,nProgs):(nProgs-cols);
+        if(nProgs<=3)totalInRow=nProgs;
+
+        var startX=dm.x-(dm.w-1.0)/2+(dm.w-1.0-(totalInRow-1)*1.15)/2;
+        var px=startX+c*1.15;
+        var pz=dm.z-(dm.h/2-0.7)+r*1.25;
+
+        var temProjs=(st.q>0);
+        var hFinal=temProjs?(0.28+2.95*Math.sqrt(st.q/maxP)):0.05;
+        var opacTower=isDirAtiva?(temProjs?1.0:0.22):0.15;
+        var emissiveInt=temProjs&&isDirAtiva?0.22:0.02;
+
+        var col=new T.Color(p.c);
+        var mat=new T.MeshStandardMaterial({
+          color:col,
+          emissive:col,
+          emissiveIntensity:emissiveInt,
+          metalness:0.22,
+          roughness:0.35,
+          transparent:true,
+          opacity:opacTower
+        });
+
+        var tower=new T.Mesh(geoHex,mat);
+        tower.position.set(px,0,pz);
+        tower.scale.set(1,hFinal,1);
+
+        var lb=null;
+        if(temProjs&&isDirAtiva){
+          lb=criarSprite(st.q.toLocaleString('pt-BR'),null);
+          lb.position.set(px,hFinal+0.28,pz);
+          grpProgs.add(lb);labelsProg.push(lb);
+        }
+
+        tower.userData={
+          tipo:'prog',
+          d:{s:p.s,n:p.n,d:p.d,c:p.c,q:st.q,v:st.v,qGeral:p.q},
+          h:hFinal,
+          hy:hFinal,
+          s:1,
+          lb:lb
+        };
+        grpProgs.add(tower);barrasProg.push(tower);
+      });
+
+      var badgeTxt=dm.d+' · '+dirTotQ+' proj.';
+      var dirBadge=criarSprite(badgeTxt,dm.cor,0.34);
+      dirBadge.position.set(dm.x,0.22,dm.z+dm.h/2+0.18);
+      grpProgs.add(dirBadge);labelsProg.push(dirBadge);
+    });
+  }
+
+  /* Câmera com Suavização de Glide (Pan e Zoom Animados) */
+  var dist=11.2,elev=0.66,rotY=0,velY=0,panX=0.35,panZ=0.45;
+  var distAlvo=11.2,elevAlvo=0.66,panAlvoX=0.35,panAlvoZ=0.45;
+
+  function enquadrar(){
+    cam.aspect=W/H;
+    var fator=(W/H<1.45)?1.22:1;
+    var d=dist*fator;
+    cam.position.set(panX,d*Math.sin(elev),panZ+d*Math.cos(elev));
+    cam.lookAt(panX,0.35,panZ);
+    cam.updateProjectionMatrix();
+  }
+
+  window.__rpZoom=function(delta){
+    distAlvo=Math.max(4.5,Math.min(22,distAlvo+delta));
+  };
+  window.__rpReset=function(){
+    if(modo3D!=='progs'){distAlvo=11.2;elevAlvo=0.66;rotY=0;panAlvoX=0.35;panAlvoZ=0.45;}
+    else{distAlvo=12.8;elevAlvo=0.55;rotY=0;panAlvoX=0;panAlvoZ=0;}
+    velY=0;palco.rotation.y=0;
+  };
+
+  atualizarCena3D=function(trocaModo){
+    grpMapa.visible=(modo3D!=='progs');
+    grpProgs.visible=(modo3D==='progs');
+    if(modo3D!=='progs')reconstruirMapa();
+    else reconstruirProgs();
+    if(trocaModo)window.__rpReset();
+  };
+  atualizarCena3D(true);
+
+  var ray=new T.Raycaster(),ms=new T.Vector2(),dentro=false,mx=0,my=0,arr=false,panModo=false,ux=0,uy=0,mov=0,hover=null,raf=0;
+  cv.addEventListener('contextmenu',function(e){e.preventDefault();});
+  cv.addEventListener('wheel',function(e){
+    e.preventDefault();e.stopPropagation();
+    window.__rpZoom(e.deltaY>0?1.15:-1.15);
+  },{passive:false});
+
+  cv.addEventListener('pointermove',function(e){
+    var r=cv.getBoundingClientRect();mx=e.clientX-r.left;my=e.clientY-r.top;
+    ms.x=mx/r.width*2-1;ms.y=-(my/r.height)*2+1;dentro=true;
+    if(arr){
+      var dx=e.clientX-ux,dy=e.clientY-uy;ux=e.clientX;uy=e.clientY;
+      mov+=Math.abs(dx)+Math.abs(dy);
+      if(panModo){
+        var esc=dist*0.0018;
+        panAlvoX=Math.max(-5,Math.min(5,panAlvoX-dx*esc));
+        panAlvoZ=Math.max(-4,Math.min(4,panAlvoZ-dy*esc));
+      }else{
+        velY=dx*0.0075;palco.rotation.y+=velY;
+        elevAlvo=Math.max(0.28,Math.min(1.28,elevAlvo+dy*0.0045));
+      }
+    }
+  });
+  cv.addEventListener('pointerdown',function(e){
+    arr=true;panModo=(e.button===2||e.shiftKey);ux=e.clientX;uy=e.clientY;mov=0;velY=0;
+    try{cv.setPointerCapture(e.pointerId);}catch(err){}
+  });
+  cv.addEventListener('pointerup',function(){
+    arr=false;
+    if(mov<6&&hover){
+      var u=hover.userData;
+      if(u.tipo==='prog')irPara(u.d.s);
+      else if(u.tipo==='mun'){
+        if(munAtivo===u.e.mun){munAtivo='';munLabel='';}
+        else{munAtivo=u.e.mun;munLabel=u.e.raw;}
+        filtrar();
+      }else if(u.tipo==='meso'||u.tipo==='meso-bar'){
+        mesoAtiva=(mesoAtiva===u.idx)?-1:u.idx;
+        filtrar();
+      }
+    }
+  });
+  cv.addEventListener('pointerleave',function(){dentro=false;arr=false;});
+  cv.addEventListener('dblclick',function(){window.__rpReset();});
+
+  function loop(){
+    if(!cv.isConnected){window.__rp3d();return;}
+    raf=requestAnimationFrame(loop);
+
+    /* Interpolação suave de Câmera */
+    panX+=(panAlvoX-panX)*0.12;
+    panZ+=(panAlvoZ-panZ)*0.12;
+    dist+=(distAlvo-dist)*0.12;
+    elev+=(elevAlvo-elev)*0.12;
+    enquadrar();
+
+    var w0=cv.clientWidth||520,h0=cv.clientHeight||212;
+    if(w0!==W||h0!==H){W=w0;H=h0;ren.setSize(W,H,false);enquadrar();}
+    if(dentro&&!arr){
+      ray.setFromCamera(ms,cam);
+      var alvos=(modo3D!=='progs')?barrasMun.concat(malhasMeso):barrasProg;
+      var hit=ray.intersectObjects(alvos,false);
+      hover=hit.length?hit[0].object:null;
+    }else if(!dentro)hover=null;
+
+    if(modo3D!=='progs'){
+      barrasMun.forEach(function(m){
+        var u=m.userData,ativo=(m===hover)||(u.tipo==='mun'&&munAtivo&&u.e.mun===munAtivo)||(u.tipo==='meso-bar'&&mesoAtiva===u.idx);
+        u.hy+=(u.h-u.hy)*0.18;
+        u.s+=(((ativo?1.42:1)*(u.w||1))-u.s)*0.2;
+        m.scale.set(u.s,Math.max(0.05,u.hy),u.s);
+        m.material.emissiveIntensity+=((ativo?0.78:0.28)-m.material.emissiveIntensity)*0.18;
+        if(u.lb)u.lb.position.y=(u.yBase||0.25)+m.scale.y+0.26;
+      });
+      malhasMeso.forEach(function(m,idx){
+        var u=m.userData,ativo=(m===hover)||(mesoAtiva===idx);
+        var alvoS=u.hAlvo||1;
+        u.hy+=(alvoS-u.hy)*0.18;
+        m.scale.y=u.hy;
+        m.position.y+=((ativo?0.06:0)-m.position.y)*0.2;
+        if(bordasMeso[idx])bordasMeso[idx].position.y=m.position.y+0.24*u.hy+0.02;
+      });
+      if(!arr&&Math.abs(velY)>0.0002){palco.rotation.y+=velY;velY*=0.9;}
+    }else{
+      barrasProg.forEach(function(m){
+        var u=m.userData,naDir=dirOk(u.d.d),ativo=(m===hover)||(realce&&u.d.s===realce);
+        var alvoH=u.h;
+        u.hy+=(alvoH-u.hy)*0.16;
+        u.s+=((ativo?1.25:(naDir?1:0.85))-u.s)*0.18;
+        m.scale.set(u.s,Math.max(0.04,u.hy),u.s);
+        if(u.lb){
+          u.lb.position.y=m.scale.y+0.28;
+          u.lb.material.opacity+=((naDir&&u.d.q>0?0.95:0)-u.lb.material.opacity)*0.15;
+        }
+        m.material.opacity+=((naDir?(u.d.q>0?1:0.22):0.15)-m.material.opacity)*0.15;
+        m.material.emissiveIntensity+=((ativo?0.65:(naDir&&u.d.q>0?0.22:0.02))-m.material.emissiveIntensity)*0.15;
+      });
+      if(!arr){
+        if(Math.abs(velY)>0.0002){palco.rotation.y+=velY;velY*=0.92;}
+        else if(!hover&&!realce)palco.rotation.y+=0.0014;
+      }
+    }
+
+    if(hover){
+      var u=hover.userData;
+      if(u.tipo==='mun'){
+        var e=u.e,vt=e.v>0?('<span class=tv>'+fmtBRL(e.v)+'</span>'):'';
+        var ds=['DPD','DCTT','DIPRO','DIAE'].filter(function(k){return e.porDir[k]>0;}).map(function(k){return k+': '+e.porDir[k];}).join(' · ');
+        tip.innerHTML='<b><i style=background:'+u.c+'></i>'+e.raw+'<em>'+(MG_MESOS[e.mi]?MG_MESOS[e.mi].n:'MG')+'</em></b>'+e.q.toLocaleString('pt-BR')+' projeto(s)'+(ds?' ('+ds+')':'')+vt+'<small>Clique para filtrar este município</small>';
+        cv.style.cursor='pointer';
+      }else if(u.tipo==='meso'||u.tipo==='meso-bar'){
+        var vt2=u.v>0?('<span class=tv>'+fmtBRL(u.v)+'</span>'):'';
+        var ds2=u.porDir?['DPD','DCTT','DIPRO','DIAE'].filter(function(k){return u.porDir[k]>0;}).map(function(k){return k+': '+u.porDir[k];}).join(' · '):'';
+        tip.innerHTML='<b><i style=background:'+(u.c||'#38bdf8')+'></i>'+u.n+'<em>Mesorregião</em></b>'+u.q.toLocaleString('pt-BR')+' projeto(s) em '+u.muns+' município(s)'+(ds2?' ('+ds2+')':'')+vt2+'<small>Clique para filtrar esta região</small>';
+        cv.style.cursor='pointer';
+      }else if(u.tipo==='prog'){
+        var d=u.d;
+        var vt3=d.v>0?('<span class=tv>'+fmtBRL(d.v)+'</span>'):(d.s==='s17'?'<span class=tv>Acordo de Cooperação Técnica</span>':'');
+        var subTxt=munAtivo?('em '+munLabel):((mesoAtiva>=0&&MG_MESOS[mesoAtiva])?('em '+MG_MESOS[mesoAtiva].n):'no Estado');
+        tip.innerHTML='<b><i style=background:'+d.c+'></i>'+d.n+'<em>'+d.d+'</em></b>'+d.q.toLocaleString('pt-BR')+' projeto(s) '+subTxt+vt3+'<small>(Geral: '+d.qGeral+' projetos) · Clique para rolar até a seção</small>';
+        cv.style.cursor='pointer';
+      }
+      tip.classList.add('on');
+      tip.style.left=mx+'px';tip.style.top=my+'px';
+    }else{
+      tip.classList.remove('on');cv.style.cursor=arr?'grabbing':'grab';
+    }
+    ren.render(cena,cam);
+  }
+  loop();
+
+  window.__rp3d=function(){
+    cancelAnimationFrame(raf);
+    cv.removeEventListener('pointermove',arguments.callee);
+    if(ren){try{ren.dispose();}catch(e){}}
+  };
+  window.__rpResize=function(){
+    W=cv.clientWidth||520;H=cv.clientHeight||212;
+    ren.setSize(W,H,false);enquadrar();
+  };
+  window.addEventListener('resize',window.__rpResize);
+}
+
+if(window.THREE){iniciar3D();}
+else if(typeof THREE!=='undefined'){window.THREE=THREE;iniciar3D();}
+else{
+  var s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+  s.async=true;
+  s.onload=function(){if(typeof THREE!=='undefined')window.THREE=THREE;iniciar3D();};
+  s.onerror=grafico2D;
+  document.head.appendChild(s);
+  setTimeout(function(){if(!window.THREE&&typeof THREE!=='undefined')window.THREE=THREE;if(window.THREE)iniciar3D();else grafico2D();},2000);
+}
+})();"
+
+RETURN
+"<svg style='display:none'><defs><g id='icp'><rect x='9' y='9' width='13' height='13' rx='2' fill='none' stroke='currentColor' stroke-width='2'/><path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' fill='none' stroke='currentColor' stroke-width='2'/></g></defs></svg>" &
+"<div id='rp' data-total='" & QtdTotal & "' data-progs='" & QtdProgramas & "' data-muns='" & QtdMunicipios & "' data-valor='" & ValorConcedente & "' data-aprov='" & ValorAprovado & "'>" &
+    "<style>" & CSS & "</style>" &
+
+    -- ===== Hero Superior Unificado (KPIs + Controles de Diretoria + Mapa 3D Integrado) =====
+    "<div class='hero'>" &
+        "<div class='hero-info'>" &
+            "<div class='eyebrow'>" &
+                "<span>SUBINOVA · Monitor Executivo</span>" &
+                "<button type='button' class='fbadge' data-act='limpar-tudo' title='Remover todos os filtros aplicados'>✕ Limpar filtros</button>" &
+            "</div>" &
+            "<div class='geo-strip'>" &
+                "<div class='geo-kpi'><span>Município</span><b id='rp-gmun'>Todos</b></div>" &
+                "<div class='geo-kpi'><span>Mesorregião</span><b id='rp-gmeso'>Todas as 12</b></div>" &
+            "</div>" &
+            "<div class='hero-kpis'>" &
+                "<div class='hk'><span>Projetos</span><b id='rp-kp'>" & FORMAT ( QtdTotal, "#,##0", "pt-BR" ) & "</b><small>distribuídos</small></div>" &
+                "<div class='hk'><span>Programas</span><b id='rp-kg'>" & QtdProgramas & "</b><small>em 4 diretorias</small></div>" &
+                "<div class='hk val'>" &
+                    "<span id='rp-kvl'>Valor Concedente</span>" &
+                    "<b id='rp-kv'>" & ValorConcedente & "</b>" &
+                    "<small id='rp-ks'></small>" &
+                "</div>" &
+                "<div class='hk val aprov'>" &
+                    "<span id='rp-kavl'>Total com Contrapartida</span>" &
+                    "<b id='rp-kav'>" & ValorAprovado & "</b>" &
+                    "<small id='rp-kas'>Aporte global aprovado</small>" &
+                "</div>" &
+            "</div>" &
+            "<div class='fs-dirs'>" &
+                "<div class='fs-dirs-lbl'>Diretorias (clique p/ filtrar)</div>" &
+                "<div class='fs-dirs-row'>" &
+                    "<button type='button' class='fs-dir' data-dir='DPD'><i style='background:#2563eb'></i>DPD</button>" &
+                    "<button type='button' class='fs-dir' data-dir='DCTT'><i style='background:#0891b2'></i>DCTT</button>" &
+                    "<button type='button' class='fs-dir' data-dir='DIPRO'><i style='background:#0d9488'></i>DIPRO</button>" &
+                    "<button type='button' class='fs-dir' data-dir='DIAE'><i style='background:#4f46e5'></i>DIAE</button>" &
+                "</div>" &
+            "</div>" &
+            "<div class='hint'>Arraste p/ girar · Scroll p/ zoom · Clique em município ou região p/ filtrar</div>" &
+        "</div>" &
+        "<div class='viz'>" &
+            "<div class='viz-top'>" &
+                "<div class='vmodes'>" &
+                    "<button type='button' class='vm on' data-vm='mun' title='Mapa 3D por Município'>Por Município</button>" &
+                    "<button type='button' class='vm' data-vm='meso' title='Mapa 3D por Mesorregião'>Por Região</button>" &
+                    "<button type='button' class='vm' data-vm='progs' title='Matriz Arquitetônica das 4 Diretorias'>Programas 3D</button>" &
+                "</div>" &
+                "<div class='leg3d'>" &
+                    "<span><i style='background:#2563eb'></i>DPD</span>" &
+                    "<span><i style='background:#0891b2'></i>DCTT</span>" &
+                    "<span><i style='background:#0d9488'></i>DIPRO</span>" &
+                    "<span><i style='background:#4f46e5'></i>DIAE</span>" &
+                "</div>" &
+            "</div>" &
+            "<canvas id='rp-3d'></canvas>" &
+            "<div class='vtools'>" &
+                "<button type='button' class='vt' data-act='zin' title='Aproximar zoom (+)'>+</button>" &
+                "<button type='button' class='vt' data-act='zout' title='Afastar zoom (−)'>−</button>" &
+                "<button type='button' class='vt' data-act='zreset' title='Restaurar visão original'>Reset</button>" &
+                "<button type='button' class='vt' data-act='fs3d' title='Alternar modo tela cheia do mapa 3D'><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='15 3 21 3 21 9'/><polyline points='9 21 3 21 3 15'/><line x1='21\' y1='3\' x2='14\' y2='10\'/><line x1='3\' y1='21\' x2='10\' y2='14\'/></svg>Expandir 3D</button>" &
+            "</div>" &
+            "<div id='rp-tip' class='tip'></div>" &
+            "<div class='bars2d'></div>" &
+        "</div>" &
+    "</div>" &
+
+    -- ===== Barra de Ferramentas / Filtros Rápidos =====
+    "<div class='bar'>" &
+        "<div class='bar-l'>" &
+            "<div class='dir-group'>" & BotoesDiretoria & "</div>" &
+            "<div class='sep'></div>" &
+            "<select id='rp-ord' class='ord' title='Ordenar projetos nos cartões'>" &
+                "<option value='padrao'>Ordem padrão</option>" &
+                "<option value='maior'>Maior valor (R$)</option>" &
+                "<option value='menor'>Menor valor (R$)</option>" &
+                "<option value='mun'>Município (A-Z)</option>" &
+                "<option value='az'>Título (A-Z)</option>" &
+            "</select>" &
+        "</div>" &
+        "<div class='bar-r'>" &
+            "<button class='btn' type='button' data-act='abrir' title='Expandir todos os programas'>Expandir</button>" &
+            "<button class='btn' type='button' data-act='fechar' title='Recolher todos os programas'>Recolher</button>" &
+            "<button class='btn graf' type='button' data-act='grafico' title='Abrir painel comparativo por município'><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2'><line x1='18' y1='20' x2='18' y2='10'/><line x1='12' y1='20' x2='12' y2='4'/><line x1='6' y1='20' x2='6' y2='14'/></svg>Abrir Gráfico</button>" &
+            "<button class='btn' type='button' data-act='texto' title='Copiar relatório institucional formal para colar no Word (Ctrl+V)'><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/><line x1='16' y1='13' x2='8' y2='13'/><line x1='16' y1='17' x2='8' y2='17'/><polyline points='10 9 9 9 8 9'/></svg>Texto (Word)</button>" &
+            "<button class='btn prim' type='button' data-act='excel' title='Copiar tabela estruturada para colar no Excel'><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><rect x='9' y='9' width='13' height='13' rx='2'/><path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/></svg>Excel</button>" &
+        "</div>" &
+    "</div>" &
+
+    "<div class='subbar'>" &
+        "<div class='busca-wrap'>" &
+            "<svg class='busca-i' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>" &
+            "<input id='rp-q' class='q' type='text' autocomplete='off' placeholder='Filtrar por projeto, município, proponente, coordenador...'>" &
+            "<button class='q-x' type='button' data-act='limpar' title='Limpar busca'>✕</button>" &
+        "</div>" &
+        "<div class='filter-tags'>" &
+            "<div id='rp-cnt' class='cnt'></div>" &
+            "<div class='ftags'>" &
+                "<button type='button' id='rp-mesotag' class='ftag' data-act='limpar-meso' title='Remover filtro regional'></button>" &
+                "<button type='button' id='rp-muntag' class='ftag' data-act='limpar-mun' title='Remover filtro de município'></button>" &
+            "</div>" &
+        "</div>" &
+    "</div>" &
+
+    -- ===== Painel Analítico por Município (Abrir Gráfico) =====
+    "<section id='rp-gmodal' class='gmodal'>" &
+        "<div class='gm-head'>" &
+            "<div class='gm-title'><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#0284c7' stroke-width='2.2'><line x1='18' y1='20' x2='18' y2='10'/><line x1='12' y1='20' x2='12' y2='4'/><line x1='6' y1='20' x2='6' y2='14'/></svg>Análise Comparativa por Município <small>(clique em qualquer município para filtrar no mapa e nos dados)</small></div>" &
+            "<button type='button' class='gm-close' data-act='fechar-grafico'>Fechar gráfico ✕</button>" &
+        "</div>" &
+        "<div class='gm-kpis'>" &
+            "<div class='gm-kpi'><span>Total filtrado</span><b id='gm-k1'>—</b></div>" &
+            "<div class='gm-kpi'><span>Municípios</span><b id='gm-k2'>—</b></div>" &
+            "<div class='gm-kpi'><span>Mais projetos</span><b id='gm-k3'>—</b></div>" &
+            "<div class='gm-kpi'><span>Maior aporte</span><b id='gm-k4'>—</b></div>" &
+        "</div>" &
+        "<div class='gm-body'>" &
+            "<div id='gm-chart' class='gm-chart'></div>" &
+        "</div>" &
+    "</section>" &
+
+    -- ===== Quadro Sintético das 4 Diretorias (DPD, DCTT, DIPRO, DIAE) + Observação Metodológica =====
+    "<section class='dash'>" &
+        "<div id='rp-dirgrid' class='dir-grid'></div>" &
+        "<div class='obs-bar'><b>Observação:</b> O valor contratado é superior ao solicitado devido à ausência de dados de solicitação em determinados editais e projetos. Além disso, os programas Pró-Inovação, PCTI e Incremento da Maturidade contabilizam exclusivamente valores contratados, e o valor total via TecPop foi rateado igualmente entre os municípios atendidos.</div>" &
+    "</section>" &
+
+    -- ===== Conteúdo principal (Municípios + Seções de Cartões de Projetos) =====
+    "<div class='area'>" &
+        TermosBox &
+        "<details class='box muns'" & IF ( QtdMunicipios <= 35, " open", "" ) & ">" &
+            "<summary class='sh'>Municípios contemplados <span class='pill'>" & QtdMunicipios & "</span><small>Clique em um município para filtrar</small><span class='chev'><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2'><polyline points='6 9 12 15 18 9'/></svg></span></summary>" &
+            IF ( QtdMunicipios > 20, "<div class='mun-tools'><input id='rp-munq' class='mun-q' type='text' autocomplete='off' placeholder='Localizar município na lista…'></div>", "" ) &
+            "<div class='mun-list'>" &
+                CONCATENATEX ( MunicipiosLimpos, "<button type='button' class='mun' data-mun='" & [Município] & "'>" & [Município] & "</button>", "", [Município], ASC ) &
+            "</div>" &
+        "</details>" &
+        IF (
+            QtdTotal >= 1,
+            "<div class='box resumo'>" &
+                "<p id='rp-rtxt'>Distribuição dos <b>" & FORMAT ( QtdTotal, "#,##0", "pt-BR" ) & "</b> projetos por programa:</p>" &
+                "<div class='chips'>" & Chips & "</div>" &
+            "</div>" &
+            Secoes,
+            "<div class='empty'><b>Nenhum projeto encontrado</b><br>Ajuste os filtros selecionados no painel ou os termos de busca.</div>"
+        ) &
+        "<div id='rp-empty' class='empty' style='display:none'><b>Nenhum registro encontrado</b><br>Nenhum projeto corresponde aos filtros locais aplicados.</div>" &
+        "<div id='rp-tot' class='total'><span>Valor Concedente Total: <b>" & ValorConcedente & "</b></span><span>Total Aprovado (c/ Contrapartida): <b>" & ValorAprovado & "</b></span></div>" &
+    "</div>" &
+
+    "<button class='topo' type='button' data-act='topo' title='Voltar ao topo'>▲</button>" &
+    "<div class='toast'></div>" &
+    "<script>window.RP_DATA=" & DadosJS & ";" & JS & "</script>" &
+"</div>"

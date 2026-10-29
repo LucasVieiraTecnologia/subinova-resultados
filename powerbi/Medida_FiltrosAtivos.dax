@@ -1,0 +1,51 @@
+Filtros Ativos HTML = 
+-- Mostra "chips" com os filtros aplicados pelos segmentadores nativos.
+-- Apenas LÊ o contexto de filtro (não filtra nada). Use no visual HTML Content.
+VAR T_Proj = IF ( ISFILTERED ( ProjetosCMunicipios[Projeto] ),
+    VAR n = COUNTROWS ( VALUES ( ProjetosCMunicipios[Projeto] ) )
+    RETURN "<span class='c'><b>PROJETO</b> " & IF ( n > 2, n & " selecionados", CONCATENATEX ( VALUES ( ProjetosCMunicipios[Projeto] ), ProjetosCMunicipios[Projeto], ", " ) ) & "</span>" )
+VAR T_Ano = IF ( ISFILTERED ( ProjetosCMunicipios[Ano] ),
+    VAR n = COUNTROWS ( VALUES ( ProjetosCMunicipios[Ano] ) )
+    RETURN "<span class='c'><b>ANO</b> " & IF ( n > 3, n & " selecionados", CONCATENATEX ( VALUES ( ProjetosCMunicipios[Ano] ), ProjetosCMunicipios[Ano], ", ", ProjetosCMunicipios[Ano], ASC ) ) & "</span>" )
+VAR T_Meso = IF ( ISFILTERED ( ProjetosCMunicipios[Mesorregião] ),
+    VAR n = COUNTROWS ( VALUES ( ProjetosCMunicipios[Mesorregião] ) )
+    RETURN "<span class='c'><b>MESORREGIÃO</b> " & IF ( n > 2, n & " selecionadas", CONCATENATEX ( VALUES ( ProjetosCMunicipios[Mesorregião] ), ProjetosCMunicipios[Mesorregião], ", " ) ) & "</span>" )
+VAR T_Mun = IF ( ISFILTERED ( ProjetosCMunicipios[Município] ),
+    VAR n = COUNTROWS ( VALUES ( ProjetosCMunicipios[Município] ) )
+    RETURN "<span class='c'><b>MUNICÍPIO</b> " & IF ( n > 2, n & " selecionados", CONCATENATEX ( VALUES ( ProjetosCMunicipios[Município] ), ProjetosCMunicipios[Município], ", " ) ) & "</span>" )
+VAR T_Area = IF ( ISFILTERED ( ProjetosCMunicipios[Área de Conhecimento] ),
+    VAR n = COUNTROWS ( VALUES ( ProjetosCMunicipios[Área de Conhecimento] ) )
+    RETURN "<span class='c s'><b>ÁREA</b> " & IF ( n > 1, n & " selecionadas", SELECTEDVALUE ( ProjetosCMunicipios[Área de Conhecimento] ) ) & "</span>" )
+VAR T_Coord = IF ( ISFILTERED ( ProjetosCMunicipios[Coordenador] ),
+    VAR n = COUNTROWS ( VALUES ( ProjetosCMunicipios[Coordenador] ) )
+    RETURN "<span class='c s'><b>COORDENADOR</b> " & IF ( n > 1, n & " selecionados", SELECTEDVALUE ( ProjetosCMunicipios[Coordenador] ) ) & "</span>" )
+VAR T_Exec = IF ( ISFILTERED ( ProjetosCMunicipios[Executora] ),
+    VAR n = COUNTROWS ( VALUES ( ProjetosCMunicipios[Executora] ) )
+    RETURN "<span class='c s'><b>EXECUTORA</b> " & IF ( n > 1, n & " selecionadas", SELECTEDVALUE ( ProjetosCMunicipios[Executora] ) ) & "</span>" )
+VAR T_APQ = IF ( ISFILTERED ( ProjetosCMunicipios[APQ] ),
+    VAR n = COUNTROWS ( VALUES ( ProjetosCMunicipios[APQ] ) )
+    RETURN "<span class='c s'><b>APQ</b> " & IF ( n > 1, n & " selecionados", SELECTEDVALUE ( ProjetosCMunicipios[APQ] ) ) & "</span>" )
+
+VAR Qtd =
+    INT ( ISFILTERED ( ProjetosCMunicipios[Projeto] ) ) + INT ( ISFILTERED ( ProjetosCMunicipios[Ano] ) )
+  + INT ( ISFILTERED ( ProjetosCMunicipios[Mesorregião] ) ) + INT ( ISFILTERED ( ProjetosCMunicipios[Município] ) )
+  + INT ( ISFILTERED ( ProjetosCMunicipios[Área de Conhecimento] ) ) + INT ( ISFILTERED ( ProjetosCMunicipios[Coordenador] ) )
+  + INT ( ISFILTERED ( ProjetosCMunicipios[Executora] ) ) + INT ( ISFILTERED ( ProjetosCMunicipios[APQ] ) )
+
+VAR Css =
+"<style>
+.fw{font-family:'Segoe UI',sans-serif;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 4px;background:#060E18}
+.fw .t{color:#94A3B8;font-size:11px;font-weight:600;margin-right:4px;letter-spacing:.4px}
+.fw .q{background:#0284C7;color:#fff;border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700;margin-right:6px}
+.fw .c{background:#0B1D33;border:1px solid #1A2E47;color:#E2E8F0;border-radius:14px;padding:3px 10px;font-size:10.5px;white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis}
+.fw .c b{color:#38BDF8;font-weight:700;font-size:9.5px;margin-right:4px;letter-spacing:.3px}
+.fw .c.s{border-style:dashed}
+.fw .n{color:#64748B;font-size:11px;font-style:italic}
+</style>"
+
+RETURN
+Css & "<div class='fw'><span class='t'>FILTROS ATIVOS</span>"
+    & IF ( Qtd > 0,
+        "<span class='q'>" & Qtd & "</span>" & T_Proj & T_Ano & T_Meso & T_Mun & T_Area & T_Coord & T_Exec & T_APQ,
+        "<span class='n'>Nenhum filtro aplicado · exibindo todos os projetos</span>" )
+    & "</div>"

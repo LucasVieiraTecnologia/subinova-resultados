@@ -1,0 +1,70 @@
+{
+  "name": "SUBINOVA Dark",
+  "dataColors": ["#38BDF8", "#0284C7", "#10B981", "#F59E0B", "#A78BFA", "#F472B6", "#22D3EE", "#84CC16"],
+  "background": "#060E18",
+  "foreground": "#F8FAFC",
+  "tableAccent": "#0284C7",
+  "textClasses": {
+    "label":   { "fontFace": "Segoe UI", "fontSize": 10, "color": "#94A3B8" },
+    "title":   { "fontFace": "Segoe UI Semibold", "fontSize": 11, "color": "#F8FAFC" },
+    "header":  { "fontFace": "Segoe UI Semibold", "fontSize": 11, "color": "#F8FAFC" },
+    "callout": { "fontFace": "Segoe UI Semibold", "fontSize": 22, "color": "#F8FAFC" }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "background": [{ "show": true, "color": { "solid": { "color": "#0A182A" } }, "transparency": 0 }],
+        "border": [{ "show": true, "color": { "solid": { "color": "#1A2E47" } }, "radius": 10 }],
+        "visualHeader": [{ "show": false }],
+        "dropShadow": [{ "show": false }]
+      }
+    },
+    "page": {
+      "*": {
+        "background": [{ "color": { "solid": { "color": "#060E18" } }, "transparency": 0 }],
+        "outspace": [{ "color": { "solid": { "color": "#060E18" } } }]
+      }
+    },
+    "slicer": {
+      "*": {
+        "title": [{ "show": false }],
+        "header": [{
+          "show": true,
+          "fontColor": { "solid": { "color": "#38BDF8" } },
+          "fontFamily": "Segoe UI Semibold",
+          "textSize": 9,
+          "outline": "None",
+          "background": { "solid": { "color": "#0A182A" } }
+        }],
+        "items": [{
+          "fontColor": { "solid": { "color": "#E2E8F0" } },
+          "background": { "solid": { "color": "#0B1D33" } },
+          "fontFamily": "Segoe UI",
+          "textSize": 10,
+          "outline": "None",
+          "padding": 4
+        }],
+        "selection": [{ "selectAllCheckboxEnabled": true, "singleSelect": false }],
+        "data": [{ "mode": "Dropdown" }],
+        "general": [{ "outlineColor": { "solid": { "color": "#1A2E47" } }, "outlineWeight": 1 }],
+        "background": [{ "show": true, "color": { "solid": { "color": "#0A182A" } }, "transparency": 0 }],
+        "border": [{ "show": true, "color": { "solid": { "color": "#1A2E47" } }, "radius": 10 }],
+        "padding": [{ "top": 6, "bottom": 6, "left": 10, "right": 10 }]
+      }
+    },
+    "actionButton": {
+      "*": {
+        "fill": [
+          { "show": true, "fillColor": { "solid": { "color": "#0B1D33" } }, "transparency": 0 },
+          { "$id": "hover", "show": true, "fillColor": { "solid": { "color": "#0284C7" } }, "transparency": 0 }
+        ],
+        "text": [
+          { "show": true, "fontColor": { "solid": { "color": "#38BDF8" } }, "fontFamily": "Segoe UI Semibold", "fontSize": 10 },
+          { "$id": "hover", "fontColor": { "solid": { "color": "#FFFFFF" } } }
+        ],
+        "outline": [{ "show": true, "lineColor": { "solid": { "color": "#1A2E47" } }, "roundEdge": 10 }],
+        "icon": [{ "show": false }]
+      }
+    }
+  }
+}
