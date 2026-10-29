@@ -432,7 +432,7 @@
     // Renderiza Tabela
     keysTableBody.innerHTML = '';
     if (keys.length === 0) {
-      keysTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:#64748b;">Nenhuma chave cadastrada. Clique em "+ Criar Nova Chave" para começar.</td></tr>`;
+      keysTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:#64748b;">Nenhuma chave cadastrada. Clique em "Criar Nova Chave" para começar.</td></tr>`;
       return;
     }
 
