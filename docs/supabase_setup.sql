@@ -5,7 +5,7 @@
 
 -- 1. Tabela de Chaves de Acesso
 CREATE TABLE IF NOT EXISTS public.chaves_acesso (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     chave TEXT NOT NULL UNIQUE,              -- Texto da senha (ex: @3293, @diretoria)
     chave_hash TEXT NOT NULL,                 -- Hash SHA-256 da senha
     rotulo TEXT NOT NULL,                     -- Nome/Identificador (ex: Geral, Diretoria)
@@ -14,6 +14,17 @@ CREATE TABLE IF NOT EXISTS public.chaves_acesso (
     ultimo_acesso TIMESTAMPTZ,
     total_usos INTEGER DEFAULT 0
 );
+
+-- Se a tabela já existia como UUID, converte para TEXT
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'chaves_acesso' AND column_name = 'id' AND data_type = 'uuid'
+    ) THEN
+        ALTER TABLE public.chaves_acesso ALTER COLUMN id TYPE TEXT USING id::text;
+    END IF;
+END $$;
 
 -- 2. Tabela de Configurações Gerais
 CREATE TABLE IF NOT EXISTS public.configuracoes (
@@ -43,15 +54,16 @@ ON CONFLICT (chave) DO NOTHING;
 ALTER TABLE public.chaves_acesso ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.configuracoes ENABLE ROW LEVEL SECURITY;
 
--- Visitantes podem apenas LER chaves e configs
-CREATE POLICY "Leitura pública de chaves ativas" 
-ON public.chaves_acesso FOR SELECT USING (true);
+-- Limpar políticas antigas se existirem para evitar duplicidade
+DROP POLICY IF EXISTS "Acesso total a chaves" ON public.chaves_acesso;
+DROP POLICY IF EXISTS "Leitura pública de chaves ativas" ON public.chaves_acesso;
+DROP POLICY IF EXISTS "Atualização de estatísticas de uso" ON public.chaves_acesso;
+DROP POLICY IF EXISTS "Inserção e administração de chaves" ON public.chaves_acesso;
+DROP POLICY IF EXISTS "Acesso público a configurações" ON public.configuracoes;
 
-CREATE POLICY "Atualização de estatísticas de uso" 
-ON public.chaves_acesso FOR UPDATE USING (true);
-
-CREATE POLICY "Inserção e administração de chaves" 
-ON public.chaves_acesso FOR ALL USING (true);
+-- Permite operações com a anon key
+CREATE POLICY "Acesso total a chaves" 
+ON public.chaves_acesso FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Acesso público a configurações" 
-ON public.configuracoes FOR ALL USING (true);
+ON public.configuracoes FOR ALL USING (true) WITH CHECK (true);

@@ -165,17 +165,34 @@
     async saveKey(item) {
       if (this.isCloudEnabled()) {
         const cfg = this.getCloudConfig();
+        const payload = {
+          chave: item.chave,
+          chave_hash: item.chave_hash,
+          rotulo: item.rotulo,
+          ativa: Boolean(item.ativa),
+          total_usos: Number(item.total_usos || 0)
+        };
+        // Se id for UUID válido, envia; caso contrário o Supabase gera com gen_random_uuid()
+        if (item.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id)) {
+          payload.id = item.id;
+        }
+
         const res = await fetch(`${cfg.url}/rest/v1/chaves_acesso`, {
           method: 'POST',
           headers: {
             'apikey': cfg.key,
             'Authorization': `Bearer ${cfg.key}`,
             'Content-Type': 'application/json',
-            'Prefer': 'resolution=merge-duplicates'
+            'Prefer': 'return=representation'
           },
-          body: JSON.stringify(item)
+          body: JSON.stringify(payload)
         });
-        if (!res.ok) throw new Error('Falha ao salvar chave na nuvem.');
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData.message || errData.details || `Erro HTTP ${res.status}`;
+          throw new Error(errMsg);
+        }
         return;
       }
 
@@ -569,8 +586,15 @@
     if (!val || !label) return;
 
     const hash = await computeSHA256(val);
+    let newId;
+    try {
+      newId = crypto.randomUUID();
+    } catch (e) {
+      newId = 'key-' + Date.now();
+    }
+
     const item = {
-      id: 'key-' + Date.now(),
+      id: newId,
       chave: val,
       chave_hash: hash,
       rotulo: label,
