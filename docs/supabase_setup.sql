@@ -36,7 +36,7 @@ INSERT INTO public.configuracoes (chave, valor)
 VALUES 
     ('modo_manutencao', 'false'),
     ('mensagem_manutencao', 'Painel temporariamente indisponível para atualização.'),
-    ('admin_hash', '1097e8b623cf5ab862c95359b35e0762cf39b4b0df16ff1a051515ef50b1069f') -- @admin3293
+    ('admin_hash', 'e306389b1195c6e87ed86d733e290d9ab54864ad313ab6424b3fa72b6a2a6e9b')
 ON CONFLICT (chave) DO NOTHING;
 
 -- 3. Políticas de Segurança (Row Level Security - RLS)
