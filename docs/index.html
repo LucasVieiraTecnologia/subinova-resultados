@@ -15,6 +15,10 @@
   <!-- ==================== CAMADA DE FUNDO: POWER BI ==================== -->
   <!-- Carrega no fundo desde o primeiro segundo -->
   <div id="pbi-layer" class="pbi-layer">
+    <div id="pbi-loading" class="pbi-loading">
+      <div class="pbi-spinner"></div>
+      <p>Carregando Painel Power BI...</p>
+    </div>
     <iframe 
       id="pbi-iframe"
       title="Painel de Resultados Power BI"
@@ -35,6 +39,15 @@
   >
     <source src="videoResultados.mp4" type="video/mp4">
   </video>
+
+  <!-- Botão Pular Abertura -->
+  <button id="btn-skip-video" class="btn-skip-video" title="Pular vídeo e acessar diretamente com senha">
+    <span>Pular Abertura</span>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <polygon points="5 4 15 12 5 20 5 4"/>
+      <line x1="19" y1="5" x2="19" y2="19"/>
+    </svg>
+  </button>
 
   <!-- ==================== MODAL DE AUTENTICAÇÃO (SURGE APÓS OS ~4S DO LOAD) ==================== -->
   <div id="auth-modal" class="auth-backdrop hidden">

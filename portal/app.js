@@ -8,7 +8,10 @@
 
   // Elementos do DOM
   const pbiLayer = document.getElementById('pbi-layer');
+  const pbiLoading = document.getElementById('pbi-loading');
+  const pbiIframe = document.getElementById('pbi-iframe');
   const bgVideo = document.getElementById('bg-video');
+  const btnSkipVideo = document.getElementById('btn-skip-video');
   const authModal = document.getElementById('auth-modal');
   const authForm = document.getElementById('auth-form');
   const passwordInput = document.getElementById('password-input');
@@ -231,8 +234,13 @@
     if (modalOpened) return;
     modalOpened = true;
 
+    if (btnSkipVideo) {
+      btnSkipVideo.classList.add('hidden');
+    }
+
     if (bgVideo) {
       bgVideo.classList.add('dimmed');
+      try { bgVideo.pause(); } catch (e) {}
     }
 
     authModal.classList.remove('hidden');
@@ -276,6 +284,10 @@
   }
 
   async function handleAuthSuccess() {
+    if (btnSkipVideo) {
+      btnSkipVideo.classList.add('hidden');
+    }
+
     // Fade out no modal e no vídeo
     authModal.style.transition = 'opacity 0.4s ease';
     authModal.style.opacity = '0';
@@ -320,9 +332,50 @@
      EVENTOS
      ========================================================================== */
 
-  // 1. Quando o vídeo de 4s termina -> abre a tela de senha automaticamente
+  // 1. Monitora carregamento do iframe do Power BI
+  if (pbiIframe) {
+    pbiIframe.addEventListener('load', () => {
+      if (pbiLoading) pbiLoading.classList.add('hidden');
+    });
+    // Fallback de segurança para esconder o loading após 3.5s
+    setTimeout(() => {
+      if (pbiLoading) pbiLoading.classList.add('hidden');
+    }, 3500);
+  }
+
+  // 2. Botão Pular Abertura
+  if (btnSkipVideo) {
+    btnSkipVideo.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showAuthModal();
+    });
+  }
+
+  // 3. Clique na tela ou pressionar tecla antes de abrir o modal -> abre imediatamente
+  window.addEventListener('click', (e) => {
+    if (!modalOpened) {
+      showAuthModal();
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    // Atalho ADM
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+      e.preventDefault();
+      window.location.href = 'admin.html';
+      return;
+    }
+    // Qualquer tecla antes de abrir o modal -> abre imediatamente
+    if (!modalOpened && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      showAuthModal();
+    }
+  });
+
+  // 4. Quando o vídeo de 4s termina ou falha -> abre a tela de senha automaticamente
   if (bgVideo) {
     bgVideo.addEventListener('ended', showAuthModal);
+    bgVideo.addEventListener('error', showAuthModal);
+    bgVideo.addEventListener('stalled', showAuthModal);
 
     // Fallback de segurança: caso o vídeo demore (~4.2s)
     setTimeout(() => {
@@ -332,7 +385,7 @@
     }, 4200);
   }
 
-  // 2. Validação instantânea ao digitar
+  // 5. Validação instantânea ao digitar
   let inputTimer = null;
   passwordInput.addEventListener('input', () => {
     authError.classList.remove('visible');
@@ -350,13 +403,13 @@
     }
   });
 
-  // 3. Validação ao pressionar Enter
+  // 6. Validação ao pressionar Enter
   authForm.addEventListener('submit', (e) => {
     e.preventDefault();
     trySubmit();
   });
 
-  // 4. Mostrar / Ocultar Senha
+  // 7. Mostrar / Ocultar Senha
   btnToggleEye.addEventListener('click', () => {
     const isPass = passwordInput.type === 'password';
     passwordInput.type = isPass ? 'text' : 'password';
@@ -369,14 +422,6 @@
            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
            <circle cx="12" cy="12" r="3"/>
          </svg>`;
-  });
-
-  // 5. Atalho de Teclado Global: Ctrl + Shift + A para abrir Painel ADM
-  window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
-      e.preventDefault();
-      window.location.href = 'admin.html';
-    }
   });
 
   /* ==========================================================================
@@ -394,9 +439,15 @@
     }
 
     if (bgVideo) {
-      bgVideo.play().catch(() => {
-        setTimeout(showAuthModal, 1500);
-      });
+      const playPromise = bgVideo.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // Se o navegador bloquear autoplay, abre o modal imediatamente
+          showAuthModal();
+        });
+      }
+    } else {
+      showAuthModal();
     }
   });
 

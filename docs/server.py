@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
 """
-Servidor HTTP com suporte a Range Requests (HTTP 206 Partial Content).
-Essencial para streaming de vídeo MP4 e seeking suave no navegador.
+Servidor HTTP Multi-threaded com suporte a Range Requests (HTTP 206 Partial Content).
+Essencial para streaming de vídeo MP4 e seeking suave no navegador sem travar outros assets.
+Suporta múltiplas portas simultaneamente (3000 e 8080).
 """
 
 import os
 import sys
+import threading
 import mimetypes
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-PORT = 8080
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 
-class RangeRequestHandler(BaseHTTPRequestHandler):
+mimetypes.add_type('video/mp4', '.mp4')
+mimetypes.add_type('text/css', '.css')
+mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type('application/json', '.json')
+mimetypes.add_type('text/html; charset=utf-8', '.html')
+
+class RobustRangeRequestHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def translate_path(self, path):
-        # Remove query parameters and hashes
         clean_path = path.split('?', 1)[0].split('#', 1)[0]
         if clean_path in ('', '/'):
             clean_path = '/index.html'
@@ -23,10 +31,19 @@ class RangeRequestHandler(BaseHTTPRequestHandler):
             return None
         return local_path
 
+    def end_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Headers', '*')
+        super().end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.end_headers()
+
     def do_GET(self):
         file_path = self.translate_path(self.path)
         if not file_path or not os.path.exists(file_path) or os.path.isdir(file_path):
-            self.send_error(404, "Arquivo não encontrado")
+            self.send_error(404, "Arquivo nao encontrado")
             return
 
         file_size = os.path.getsize(file_path)
@@ -37,13 +54,12 @@ class RangeRequestHandler(BaseHTTPRequestHandler):
         range_header = self.headers.get('Range')
 
         if range_header and range_header.startswith('bytes='):
-            # Parse Range: bytes=start-end
             try:
                 ranges = range_header.replace('bytes=', '').split('-')
                 start = int(ranges[0]) if ranges[0] else 0
                 end = int(ranges[1]) if len(ranges) > 1 and ranges[1] else file_size - 1
             except ValueError:
-                self.send_error(400, "Range inválido")
+                self.send_error(400, "Range invalido")
                 return
 
             if start >= file_size or end >= file_size or start > end:
@@ -72,7 +88,7 @@ class RangeRequestHandler(BaseHTTPRequestHandler):
                         break
                     try:
                         self.wfile.write(buf)
-                    except (BrokenPipeError, ConnectionResetError):
+                    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                         break
                     remaining -= len(buf)
         else:
@@ -91,29 +107,38 @@ class RangeRequestHandler(BaseHTTPRequestHandler):
                         break
                     try:
                         self.wfile.write(buf)
-                    except (BrokenPipeError, ConnectionResetError):
+                    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                         break
 
     def log_message(self, format, *args):
-        # Silencia logs repetitivos para manter o terminal limpo
         pass
 
 def run():
     os.chdir(DIRECTORY)
-    server_address = ('', PORT)
-    httpd = HTTPServer(server_address, RangeRequestHandler)
-    print("=" * 65)
-    print(f" PORTAL DE RESULTADOS INICIADO COM SUCESSO!")
-    print(f" Endereço local: http://localhost:{PORT}")
-    print(f" Diretório base: {DIRECTORY}")
-    print(f" Senha de acesso criptografada: @3293")
-    print(" Pressione Ctrl+C para encerrar o servidor.")
-    print("=" * 65)
+    ThreadingHTTPServer.allow_reuse_address = True
+    
+    servers = []
+    for port in [3000, 8080]:
+        try:
+            httpd = ThreadingHTTPServer(('0.0.0.0', port), RobustRangeRequestHandler)
+            servers.append((port, httpd))
+            print(f" Servidor ativo em: http://localhost:{port}")
+        except Exception as e:
+            print(f" Porta {port} nao pode ser aberta: {e}")
+
+    if not servers:
+        print("Erro: Nenhuma porta disponivel.")
+        return
+
+    for port, s in servers[1:]:
+        t = threading.Thread(target=s.serve_forever, daemon=True)
+        t.start()
+
     try:
-        httpd.serve_forever()
+        servers[0][1].serve_forever()
     except KeyboardInterrupt:
-        print("\nServidor encerrado pelo usuário.")
-        httpd.server_close()
+        for port, s in servers:
+            s.server_close()
 
 if __name__ == '__main__':
     run()
