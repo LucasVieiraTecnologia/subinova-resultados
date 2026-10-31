@@ -450,6 +450,15 @@
       }
       pbiLayer.classList.add('active');
     }, 400);
+
+    // Sessão com expiração automática a cada 5 minutos (F5 forçado para exigir novo login)
+    const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
+    setTimeout(() => {
+      if (pbiIframe) {
+        pbiIframe.src = 'about:blank';
+      }
+      window.location.reload();
+    }, SESSION_TIMEOUT_MS);
   }
 
   function handleAuthError(msg) {
