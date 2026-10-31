@@ -19,8 +19,11 @@
   const authError = document.getElementById('auth-error');
   const authErrorText = document.getElementById('auth-error-text');
   const authCard = document.querySelector('.auth-card');
+  const securityAlertModal = document.getElementById('security-alert-modal');
+  const btnSecurityReload = document.getElementById('btn-security-reload');
 
   let modalOpened = false;
+  let isDevToolsTriggered = false;
 
   /* ==========================================================================
      ALGORITMO SHA-256
@@ -502,19 +505,91 @@
     });
   }
 
-  window.addEventListener('click', () => {
-    if (!modalOpened) {
-      showAuthModal();
-    }
-  });
+  /* ==========================================================================
+     PROTEÇÃO ANTI-DEVTOOLS & KILL-SWITCH DE SEGURANÇA
+     ========================================================================== */
+  function triggerSecurityLockout() {
+    if (isDevToolsTriggered) return;
+    isDevToolsTriggered = true;
 
+    // Descarrega imediatamente o Power BI para about:blank
+    if (pbiIframe) {
+      pbiIframe.src = 'about:blank';
+    }
+    if (pbiLayer) {
+      pbiLayer.classList.remove('active');
+    }
+
+    // Exibe o modal de segurança
+    if (securityAlertModal) {
+      securityAlertModal.classList.remove('hidden');
+    }
+  }
+
+  if (btnSecurityReload) {
+    btnSecurityReload.addEventListener('click', () => {
+      window.location.reload();
+    });
+  }
+
+  // 1. Bloqueia clique com botão direito na página inteira
+  window.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    return false;
+  }, true);
+
+  // 2. Bloqueia atalhos de teclado de inspeção e código-fonte
   window.addEventListener('keydown', (e) => {
+    // Mantém o atalho do ADM (Ctrl+Shift+A) funcionando
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
       e.preventDefault();
       window.location.href = 'admin.html';
       return;
     }
+
+    // F12
+    if (e.key === 'F12' || e.keyCode === 123) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerSecurityLockout();
+      return false;
+    }
+
+    // Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C (DevTools / Console / Inspector)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'i', 'J', 'j', 'C', 'c'].includes(e.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerSecurityLockout();
+      return false;
+    }
+
+    // Ctrl+U (Ver código-fonte) e Ctrl+S (Salvar página completa)
+    if ((e.ctrlKey || e.metaKey) && ['U', 'u', 'S', 's'].includes(e.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
+    // Abertura do modal ao pressionar qualquer tecla antes de abrir
     if (!modalOpened && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      showAuthModal();
+    }
+  }, true);
+
+  // 3. Monitor contínuo do DevTools acoplado à janela
+  setInterval(() => {
+    if (isDevToolsTriggered) return;
+    const widthDiff = window.outerWidth - window.innerWidth;
+    const heightDiff = window.outerHeight - window.innerHeight;
+    if (widthDiff > 180 || heightDiff > 180) {
+      if (pbiLayer && pbiLayer.classList.contains('active')) {
+        triggerSecurityLockout();
+      }
+    }
+  }, 700);
+
+  window.addEventListener('click', () => {
+    if (!modalOpened) {
       showAuthModal();
     }
   });
