@@ -1,8 +1,6 @@
 (function () {
   'use strict';
 
-  // Configurações e Chaves Padrão
-  const DEFAULT_HASH = "0257caf28e46a4c150cad95f28fa4bf0d2c2183d2eb2ad61be1d76d35136ca24"; // @3293
   const LOCAL_STORAGE_KEYS = 'subinova_chaves_acesso';
   const LOCAL_STORAGE_CLOUD = 'subinova_cloud_config';
 
@@ -38,7 +36,7 @@
     var result = '';
     var words = [];
     var asciiBitLength = ascii[lengthProperty] * 8;
-    
+
     var hash = [
       0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
       0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
@@ -157,17 +155,17 @@
     if (cachedIpInfo) return cachedIpInfo;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2600);
+      const timeoutId = setTimeout(() => controller.abort(), 2200);
       const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const d = await res.json();
         cachedIpInfo = {
           ip: d.ip || 'Desconhecido',
-          cidade: d.city || '',
-          regiao: d.region || '',
+          cidade: d.city || 'N/A',
+          regiao: d.region || 'N/A',
           pais: d.country_name || 'Brasil',
-          provedor: d.org || ''
+          provedor: d.org || 'N/A'
         };
         return cachedIpInfo;
       }
@@ -176,55 +174,16 @@
         const resIp = await fetch('https://api.ipify.org?format=json');
         if (resIp.ok) {
           const d = await resIp.json();
-          cachedIpInfo = { ip: d.ip, cidade: '', regiao: '', pais: 'Brasil', provedor: '' };
+          cachedIpInfo = { ip: d.ip, cidade: 'N/A', regiao: 'N/A', pais: 'Brasil', provedor: 'N/A' };
           return cachedIpInfo;
         }
       } catch (err) {}
     }
-    return { ip: 'Desconhecido', cidade: '', regiao: '', pais: 'Brasil', provedor: '' };
+    return { ip: 'Desconhecido', cidade: 'N/A', regiao: 'N/A', pais: 'Brasil', provedor: 'N/A' };
   }
 
-  async function recordAccessLog({ chave, rotulo, sucesso, detalhes }) {
-    const device = getClientDeviceInfo();
-    const ipInfo = await fetchIpLocation();
-
-    const logEntry = {
-      chave: chave || 'N/A',
-      rotulo: rotulo || 'N/A',
-      sucesso: Boolean(sucesso),
-      ip: ipInfo.ip || 'N/A',
-      cidade: ipInfo.cidade || 'N/A',
-      regiao: ipInfo.regiao || 'N/A',
-      pais: ipInfo.pais || 'Brasil',
-      provedor: ipInfo.provedor || 'N/A',
-      dispositivo: device.os,
-      navegador: device.browser,
-      detalhes: detalhes || '',
-      criado_em: new Date().toISOString()
-    };
-
-    // 1. Envia para Supabase em segundo plano
-    const cfg = KeyStore.getCloudConfig();
-    if (cfg && cfg.url && cfg.key) {
-      fetch(`${cfg.url}/rest/v1/logs_acesso`, {
-        method: 'POST',
-        headers: {
-          'apikey': cfg.key,
-          'Authorization': `Bearer ${cfg.key}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(logEntry)
-      }).catch(() => {});
-    }
-
-    // 2. Salva localmente como histórico de contingência
-    try {
-      const localLogs = JSON.parse(localStorage.getItem('subinova_logs_acesso')) || [];
-      localLogs.unshift(logEntry);
-      if (localLogs.length > 200) localLogs.pop();
-      localStorage.setItem('subinova_logs_acesso', JSON.stringify(localLogs));
-    } catch (e) {}
-  }
+  // Pré-carrega informações de IP em segundo plano sem bloquear a interface
+  fetchIpLocation().catch(() => {});
 
   /* ==========================================================================
      PROTEÇÃO CONTRA FORÇA BRUTA (BLOQUEIO TEMPORÁRIO APÓS 5 FALHAS)
@@ -269,7 +228,7 @@
   };
 
   /* ==========================================================================
-     CAMADA DE VALIDAÇÃO (NUVEM / LOCALSTORAGE)
+     CAMADA DE VALIDAÇÃO BLINDADA (SUPABASE RPC SERVER-SIDE)
      ========================================================================== */
   const KeyStore = {
     getCloudConfig() {
@@ -283,112 +242,98 @@
       return null;
     },
 
-    async isMaintenanceActive() {
+    async fetchPortalStatus() {
       const cfg = this.getCloudConfig();
       if (cfg && cfg.url && cfg.key) {
         try {
-          const res = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.modo_manutencao&select=valor`, {
-            headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
+          const res = await fetch(`${cfg.url}/rest/v1/rpc/obter_status_portal`, {
+            method: 'POST',
+            headers: {
+              'apikey': cfg.key,
+              'Authorization': `Bearer ${cfg.key}`,
+              'Content-Type': 'application/json'
+            },
+            body: '{}'
           });
           if (res.ok) {
             const data = await res.json();
-            if (data.length) return data[0].valor === 'true';
-          }
-        } catch (e) {}
-      }
-      return localStorage.getItem('subinova_modo_manutencao') === 'true';
-    },
-
-    async fetchBannerConfig() {
-      const cfg = this.getCloudConfig();
-      if (cfg && cfg.url && cfg.key) {
-        try {
-          const res = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=in.(banner_ativo,banner_mensagem)&select=*`, {
-            headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
-          });
-          if (res.ok) {
-            const rows = await res.json();
-            const map = {};
-            rows.forEach(r => { map[r.chave] = r.valor; });
             return {
-              ativo: map['banner_ativo'] === 'true',
-              mensagem: map['banner_mensagem'] || ''
+              modo_manutencao: Boolean(data.modo_manutencao),
+              mensagem_manutencao: data.mensagem_manutencao || '',
+              banner_ativo: Boolean(data.banner_ativo),
+              banner_mensagem: data.banner_mensagem || ''
             };
           }
         } catch (e) {}
       }
       return {
-        ativo: localStorage.getItem('subinova_banner_ativo') === 'true',
-        mensagem: localStorage.getItem('subinova_banner_msg') || ''
+        modo_manutencao: localStorage.getItem('subinova_modo_manutencao') === 'true',
+        mensagem_manutencao: 'Painel em manutenção temporária.',
+        banner_ativo: localStorage.getItem('subinova_banner_ativo') === 'true',
+        banner_mensagem: localStorage.getItem('subinova_banner_msg') || ''
       };
     },
 
-    async fetchAllKeys() {
+    async validateServerSide(password, registrarFalha) {
       const cfg = this.getCloudConfig();
+      const clean = password.trim();
+      const hash = await computeSHA256(clean);
+
       if (cfg && cfg.url && cfg.key) {
-        try {
-          const res = await fetch(`${cfg.url}/rest/v1/chaves_acesso?select=*`, {
-            headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) return data;
-          }
-        } catch (e) {
-          console.warn('Erro ao buscar chaves na nuvem, usando local:', e);
-        }
-      }
+        const device = getClientDeviceInfo();
+        const ipInfo = registrarFalha ? await fetchIpLocation() : (cachedIpInfo || {
+          ip: 'Desconhecido',
+          cidade: 'N/A',
+          regiao: 'N/A',
+          pais: 'Brasil',
+          provedor: 'N/A'
+        });
 
-      // Local storage fallback
-      const raw = localStorage.getItem(LOCAL_STORAGE_KEYS);
-      if (raw) {
-        try {
-          return JSON.parse(raw);
-        } catch (e) {}
-      }
+        const payload = {
+          p_chave: clean,
+          p_hash: hash,
+          p_ip: ipInfo.ip || 'N/A',
+          p_cidade: ipInfo.cidade || 'N/A',
+          p_regiao: ipInfo.regiao || 'N/A',
+          p_pais: ipInfo.pais || 'Brasil',
+          p_provedor: ipInfo.provedor || 'N/A',
+          p_dispositivo: device.os,
+          p_navegador: device.browser,
+          p_registrar_falha: Boolean(registrarFalha)
+        };
 
-      return [{
-        id: 'key-default',
-        chave: '@3293',
-        chave_hash: DEFAULT_HASH,
-        rotulo: 'Padrão',
-        ativa: true,
-        total_usos: 0
-      }];
-    },
-
-    async recordUsage(keyItem) {
-      if (!keyItem) return;
-      const now = new Date().toISOString();
-      const newTotal = (keyItem.total_usos || 0) + 1;
-
-      // Se nuvem:
-      const cfg = this.getCloudConfig();
-      if (cfg && cfg.url && cfg.key && keyItem.id) {
-        fetch(`${cfg.url}/rest/v1/chaves_acesso?id=eq.${keyItem.id}`, {
-          method: 'PATCH',
+        const res = await fetch(`${cfg.url}/rest/v1/rpc/validar_chave_acesso`, {
+          method: 'POST',
           headers: {
             'apikey': cfg.key,
             'Authorization': `Bearer ${cfg.key}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ total_usos: newTotal, ultimo_acesso: now })
-        }).catch(() => {});
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          return await res.json();
+        }
+        return { ok: false, error: 'Erro de comunicação com o servidor de autenticação.' };
       }
 
-      // Se local:
-      try {
-        const raw = localStorage.getItem(LOCAL_STORAGE_KEYS);
-        if (raw) {
-          const keys = JSON.parse(raw);
-          const k = keys.find(item => item.id === keyItem.id || item.chave === keyItem.chave);
-          if (k) {
-            k.total_usos = newTotal;
-            k.ultimo_acesso = now;
-            localStorage.setItem(LOCAL_STORAGE_KEYS, JSON.stringify(keys));
-          }
-        }
-      } catch (e) {}
+      // Modo estritamente local (quando não há nuvem configurada)
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEYS);
+      const keys = raw ? JSON.parse(raw) : [];
+      const match = keys.find(k => k.chave_hash === hash || k.chave === clean);
+      if (!match) return { ok: false, error: 'Senha incorreta.' };
+      if (!match.ativa) return { ok: false, error: 'Esta chave de acesso foi desativada.' };
+      if (match.expira_em && Date.now() > new Date(match.expira_em).getTime()) {
+        return { ok: false, error: 'Esta chave de acesso expirou.' };
+      }
+      if (match.limite_usos && Number(match.limite_usos) > 0 && (match.total_usos || 0) >= Number(match.limite_usos)) {
+        return { ok: false, error: 'Limite de utilizações atingido.' };
+      }
+      match.total_usos = (match.total_usos || 0) + 1;
+      match.ultimo_acesso = new Date().toISOString();
+      localStorage.setItem(LOCAL_STORAGE_KEYS, JSON.stringify(keys));
+      return { ok: true, pbi_url: '' };
     }
   };
 
@@ -408,11 +353,10 @@
       try { bgVideo.pause(); } catch (e) {}
     }
 
-    // Carrega banner se houver comunicado ativo
     try {
-      const banner = await KeyStore.fetchBannerConfig();
-      if (banner.ativo && banner.mensagem && authBanner && authBannerText) {
-        authBannerText.textContent = banner.mensagem;
+      const status = await KeyStore.fetchPortalStatus();
+      if (status.banner_ativo && status.banner_mensagem && authBanner && authBannerText) {
+        authBannerText.textContent = status.banner_mensagem;
         authBanner.classList.remove('hidden');
       }
     } catch (e) {}
@@ -421,7 +365,6 @@
     passwordInput.value = '';
     authError.classList.remove('visible');
 
-    // Checa bloqueio de força bruta
     const lockState = Security.getState();
     if (lockState.isLocked) {
       startLockoutCountdown(lockState.lockedUntil);
@@ -454,90 +397,49 @@
   }
 
   /* ==========================================================================
-     VALIDAÇÃO DA SENHA & LIBERAÇÃO IMEDIATA DO POWER BI
+     VALIDAÇÃO DA SENHA & LIBERAÇÃO DO POWER BI
      ========================================================================== */
-  async function validateAccessKey(password) {
+  async function validateAccessKey(password, { silent = false } = {}) {
     if (!password) return { ok: false, error: 'Digite uma senha.' };
 
-    // 0. Checa bloqueio anti-brute force
     const sec = Security.getState();
     if (sec.isLocked) {
       return { ok: false, error: 'Acesso temporariamente bloqueado por excesso de tentativas.' };
     }
 
-    // 1. Checa se o painel está em manutenção
-    const inMaintenance = await KeyStore.isMaintenanceActive();
-    if (inMaintenance) {
-      recordAccessLog({ chave: password, rotulo: 'Tentativa', sucesso: false, detalhes: 'Bloqueado: Painel em Manutenção' });
-      return { ok: false, error: 'Painel em manutenção temporária. Tente mais tarde.' };
-    }
+    const result = await KeyStore.validateServerSide(password, !silent);
 
-    const clean = password.trim();
-    const hash = await computeSHA256(clean);
-    const keys = await KeyStore.fetchAllKeys();
-
-    // 2. Busca chave correspondente
-    const match = keys.find(k => k.chave === clean || k.chave === password || k.chave_hash === hash);
-
-    if (match) {
-      // 2.1 Checa se chave está bloqueada
-      if (!match.ativa) {
-        Security.recordFailure();
-        recordAccessLog({ chave: clean, rotulo: match.rotulo, sucesso: false, detalhes: 'Chave revogada/bloqueada' });
-        return { ok: false, error: 'Esta chave de acesso foi desativada ou revogada pela administração.' };
-      }
-
-      // 2.2 Checa se chave expirou por data
-      if (match.expira_em) {
-        const expDate = new Date(match.expira_em);
-        if (!isNaN(expDate) && Date.now() > expDate.getTime()) {
-          Security.recordFailure();
-          recordAccessLog({ chave: clean, rotulo: match.rotulo, sucesso: false, detalhes: 'Chave expirada por data' });
-          return { ok: false, error: 'Esta chave de acesso expirou a data de validade.' };
-        }
-      }
-
-      // 2.3 Checa se atingiu o limite de utilizações
-      if (match.limite_usos && Number(match.limite_usos) > 0) {
-        if ((match.total_usos || 0) >= Number(match.limite_usos)) {
-          Security.recordFailure();
-          recordAccessLog({ chave: clean, rotulo: match.rotulo, sucesso: false, detalhes: 'Limite de usos atingido' });
-          return { ok: false, error: 'Esta chave atingiu o limite máximo de utilizações permitidas.' };
-        }
-      }
-
-      // SUCESSO!
+    if (result && result.ok) {
       Security.reset();
-      KeyStore.recordUsage(match);
-      recordAccessLog({ chave: match.chave, rotulo: match.rotulo, sucesso: true, detalhes: 'Acesso autenticado com sucesso' });
-      return { ok: true };
+      return { ok: true, pbi_url: result.pbi_url };
     }
 
-    // 3. Fallback de emergência (@3293)
-    if (hash === DEFAULT_HASH || clean === '@3293') {
-      Security.reset();
-      recordAccessLog({ chave: '@3293', rotulo: 'Padrão', sucesso: true, detalhes: 'Acesso autenticado via fallback' });
-      return { ok: true };
+    if (silent) {
+      return { ok: false };
     }
 
-    // FALHA: Senha incorreta
     const afterFail = Security.recordFailure();
-    recordAccessLog({ chave: clean, rotulo: 'Tentativa Incorreta', sucesso: false, detalhes: `Senha incorreta (tentativa ${afterFail.attempts}/${Security.MAX_ATTEMPTS})` });
-
     if (afterFail.isLocked) {
       startLockoutCountdown(afterFail.lockedUntil);
       return { ok: false, error: 'Limite de 5 tentativas atingido. Bloqueado por 3 minutos.' };
     }
 
-    return { ok: false, error: `Senha incorreta. (${afterFail.attempts}/${Security.MAX_ATTEMPTS} tentativas)` };
+    const baseErr = (result && result.error) ? result.error : 'Senha incorreta.';
+    if (baseErr === 'Senha incorreta.') {
+      return { ok: false, error: `Senha incorreta. (${afterFail.attempts}/${Security.MAX_ATTEMPTS} tentativas)` };
+    }
+    return { ok: false, error: baseErr };
   }
 
-  async function handleAuthSuccess() {
+  async function handleAuthSuccess(pbiUrl) {
     if (btnSkipVideo) {
       btnSkipVideo.classList.add('hidden');
     }
 
-    // Fade out no modal e no vídeo
+    if (pbiIframe && pbiUrl) {
+      pbiIframe.src = pbiUrl;
+    }
+
     authModal.style.transition = 'opacity 0.4s ease';
     authModal.style.opacity = '0';
     if (bgVideo) {
@@ -549,7 +451,6 @@
       if (bgVideo) {
         bgVideo.style.display = 'none';
       }
-      // Power BI surge 100% visível e interativo
       pbiLayer.classList.add('active');
     }, 400);
   }
@@ -560,7 +461,7 @@
     }
     authError.classList.add('visible');
     authCard.classList.remove('shake');
-    void authCard.offsetWidth; // trigger reflow
+    void authCard.offsetWidth;
     authCard.classList.add('shake');
     passwordInput.focus();
     passwordInput.select();
@@ -569,10 +470,10 @@
   async function trySubmit() {
     const val = passwordInput.value.trim();
     if (!val) return;
-    const res = await validateAccessKey(val);
+    const res = await validateAccessKey(val, { silent: false });
     if (res.ok) {
-      handleAuthSuccess();
-    } else {
+      handleAuthSuccess(res.pbi_url);
+    } else if (res.error) {
       handleAuthError(res.error);
     }
   }
@@ -580,18 +481,14 @@
   /* ==========================================================================
      EVENTOS
      ========================================================================== */
-
-  // 1. Monitora carregamento do iframe do Power BI
   if (pbiIframe) {
     pbiIframe.addEventListener('load', () => {
-      if (pbiLoading) pbiLoading.classList.add('hidden');
+      if (pbiIframe.src && pbiIframe.src !== 'about:blank' && pbiLoading) {
+        pbiLoading.classList.add('hidden');
+      }
     });
-    setTimeout(() => {
-      if (pbiLoading) pbiLoading.classList.add('hidden');
-    }, 3500);
   }
 
-  // 2. Botão Pular Abertura
   if (btnSkipVideo) {
     btnSkipVideo.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -599,15 +496,13 @@
     });
   }
 
-  // 3. Clique na tela ou tecla antes de abrir o modal -> abre imediatamente
-  window.addEventListener('click', (e) => {
+  window.addEventListener('click', () => {
     if (!modalOpened) {
       showAuthModal();
     }
   });
 
   window.addEventListener('keydown', (e) => {
-    // Atalho ADM
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
       e.preventDefault();
       window.location.href = 'admin.html';
@@ -618,7 +513,6 @@
     }
   });
 
-  // 4. Quando o vídeo de 4s termina ou falha -> abre o modal
   if (bgVideo) {
     bgVideo.addEventListener('ended', showAuthModal);
     bgVideo.addEventListener('error', showAuthModal);
@@ -631,32 +525,30 @@
     }, 4200);
   }
 
-  // 5. Validação instantânea ao digitar
   let inputTimer = null;
   passwordInput.addEventListener('input', () => {
     authError.classList.remove('visible');
     const val = passwordInput.value.trim();
-    
+
     clearTimeout(inputTimer);
     if (val.length >= 4) {
       inputTimer = setTimeout(async () => {
         const sec = Security.getState();
         if (sec.isLocked) return;
-        const res = await validateAccessKey(val);
+        const res = await validateAccessKey(val, { silent: true });
         if (res.ok) {
-          handleAuthSuccess();
+          handleAuthSuccess(res.pbi_url);
         }
-      }, 180);
+      }, 250);
     }
   });
 
-  // 6. Validação ao pressionar Enter
   authForm.addEventListener('submit', (e) => {
     e.preventDefault();
+    clearTimeout(inputTimer);
     trySubmit();
   });
 
-  // 7. Mostrar / Ocultar Senha
   btnToggleEye.addEventListener('click', () => {
     const isPass = passwordInput.type === 'password';
     passwordInput.type = isPass ? 'text' : 'password';
@@ -678,10 +570,6 @@
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('preview') === 'modal') {
       showAuthModal();
-      return;
-    }
-    if (urlParams.get('preview') === 'pbi') {
-      handleAuthSuccess();
       return;
     }
 

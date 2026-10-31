@@ -1,28 +1,12 @@
 (function () {
   'use strict';
 
-  // Configuração padrão
-  const DEFAULT_ADMIN_HASH = 'e306389b1195c6e87ed86d733e290d9ab54864ad313ab6424b3fa72b6a2a6e9b'; // @admin3293
   const LOCAL_STORAGE_KEYS = 'subinova_chaves_acesso';
-  const LOCAL_STORAGE_CONFIG = 'subinova_portal_config';
   const LOCAL_STORAGE_CLOUD = 'subinova_cloud_config';
   const LOCAL_STORAGE_LOGS = 'subinova_logs_acesso';
+  const SESSION_ADMIN_TOKEN = 'subinova_admin_token';
 
-  // Chaves iniciais padrão se não houver nada no banco/localStorage
-  const INITIAL_KEYS = [
-    {
-      id: 'key-1',
-      chave: '@3293',
-      chave_hash: '0257caf28e46a4c150cad95f28fa4bf0d2c2183d2eb2ad61be1d76d35136ca24',
-      rotulo: 'Chave Geral Padrão',
-      ativa: true,
-      expira_em: null,
-      limite_usos: null,
-      criada_em: new Date().toISOString(),
-      ultimo_acesso: null,
-      total_usos: 0
-    }
-  ];
+  const INITIAL_KEYS = [];
 
   /* ==========================================================================
      ALGORITMO SHA-256
@@ -57,6 +41,7 @@
       else if (code < 2048) composite.push((code >> 6) | 192, (code & 63) | 128);
       else composite.push((code >> 12) | 224, ((code >> 6) & 63) | 128, (code & 63) | 128);
     }
+    asciiBitLength = composite.length * 8;
     composite.push(0x80);
     while ((composite.length % 64) !== 56) composite.push(0);
     for (i = 0; i < composite.length; i += 4) {
@@ -112,9 +97,18 @@
   }
 
   /* ==========================================================================
-     CAMADA DE DADOS & NUVEM (SUPABASE / LOCALSTORAGE)
+     CAMADA DE DADOS & NUVEM BLINDADA (SUPABASE RPC)
      ========================================================================== */
   const Storage = {
+    getAdminToken() {
+      return sessionStorage.getItem(SESSION_ADMIN_TOKEN) || '';
+    },
+
+    setAdminToken(token) {
+      if (!token) sessionStorage.removeItem(SESSION_ADMIN_TOKEN);
+      else sessionStorage.setItem(SESSION_ADMIN_TOKEN, token);
+    },
+
     getCloudConfig() {
       if (window.SUBINOVA_CLOUD_CONFIG && window.SUBINOVA_CLOUD_CONFIG.url && window.SUBINOVA_CLOUD_CONFIG.key) {
         return window.SUBINOVA_CLOUD_CONFIG;
@@ -136,69 +130,87 @@
       return !!(cfg && cfg.url && cfg.key);
     },
 
-    async fetchKeys() {
+    async callRpc(fnName, payload) {
+      const cfg = this.getCloudConfig();
+      const res = await fetch(`${cfg.url}/rest/v1/rpc/${fnName}`, {
+        method: 'POST',
+        headers: {
+          'apikey': cfg.key,
+          'Authorization': `Bearer ${cfg.key}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload || {})
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || errData.details || `Erro HTTP ${res.status}`);
+      }
+      return await res.json();
+    },
+
+    async verifyAdminLogin(hash) {
       if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
         try {
-          const res = await fetch(`${cfg.url}/rest/v1/chaves_acesso?select=*&order=criada_em.desc`, {
-            headers: {
-              'apikey': cfg.key,
-              'Authorization': `Bearer ${cfg.key}`
-            }
+          const data = await this.callRpc('admin_login', { p_admin_hash: hash });
+          return Boolean(data && data.ok);
+        } catch (e) {
+          console.error('Erro ao autenticar no Supabase:', e);
+          return false;
+        }
+      }
+      const stored = localStorage.getItem('subinova_admin_hash');
+      return Boolean(stored && stored === hash);
+    },
+
+    async fetchAdminBundle() {
+      if (this.isCloudEnabled()) {
+        try {
+          const data = await this.callRpc('admin_listar_dados', {
+            p_admin_hash: this.getAdminToken()
           });
-          if (res.ok) {
-            const data = await res.json();
+          if (data && data.ok) {
             return data;
           }
+          if (data && data.error === 'Acesso negado.') {
+            logout();
+          }
         } catch (e) {
-          console.warn('Erro ao conectar ao Supabase, caindo para modo local:', e);
+          console.warn('Erro ao buscar dados da nuvem:', e);
         }
       }
 
-      // Modo Local (LocalStorage)
       const raw = localStorage.getItem(LOCAL_STORAGE_KEYS);
-      if (!raw) {
-        localStorage.setItem(LOCAL_STORAGE_KEYS, JSON.stringify(INITIAL_KEYS));
-        return INITIAL_KEYS;
+      let chaves = INITIAL_KEYS;
+      if (raw) {
+        try { chaves = JSON.parse(raw); } catch (e) {}
       }
-      try {
-        return JSON.parse(raw);
-      } catch (e) {
-        return INITIAL_KEYS;
-      }
+      return {
+        ok: true,
+        chaves,
+        modo_manutencao: localStorage.getItem('subinova_modo_manutencao') === 'true',
+        banner_ativo: localStorage.getItem('subinova_banner_ativo') === 'true',
+        banner_mensagem: localStorage.getItem('subinova_banner_msg') || ''
+      };
+    },
+
+    async fetchKeys() {
+      const bundle = await this.fetchAdminBundle();
+      return bundle.chaves || [];
     },
 
     async saveKey(item) {
       if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
-        const payload = {
-          chave: item.chave,
-          chave_hash: item.chave_hash,
-          rotulo: item.rotulo,
-          ativa: Boolean(item.ativa),
-          expira_em: item.expira_em || null,
-          limite_usos: item.limite_usos ? Number(item.limite_usos) : null,
-          total_usos: Number(item.total_usos || 0)
-        };
-        if (item.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id)) {
-          payload.id = item.id;
-        }
-
-        const res = await fetch(`${cfg.url}/rest/v1/chaves_acesso`, {
-          method: 'POST',
-          headers: {
-            'apikey': cfg.key,
-            'Authorization': `Bearer ${cfg.key}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify(payload)
+        const res = await this.callRpc('admin_salvar_chave', {
+          p_admin_hash: this.getAdminToken(),
+          p_chave: item.chave,
+          p_chave_hash: item.chave_hash,
+          p_rotulo: item.rotulo,
+          p_ativa: Boolean(item.ativa),
+          p_expira_em: item.expira_em || null,
+          p_limite_usos: item.limite_usos ? Number(item.limite_usos) : null
         });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          const errMsg = errData.message || errData.details || `Erro HTTP ${res.status}`;
-          throw new Error(errMsg);
+        if (!res || !res.ok) {
+          throw new Error((res && res.error) || 'Não foi possível salvar a chave.');
         }
         return;
       }
@@ -212,17 +224,12 @@
 
     async toggleKeyStatus(id, newStatus) {
       if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
-        const res = await fetch(`${cfg.url}/rest/v1/chaves_acesso?id=eq.${id}`, {
-          method: 'PATCH',
-          headers: {
-            'apikey': cfg.key,
-            'Authorization': `Bearer ${cfg.key}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ ativa: newStatus })
+        const res = await this.callRpc('admin_alterar_status_chave', {
+          p_admin_hash: this.getAdminToken(),
+          p_id: id,
+          p_ativa: Boolean(newStatus)
         });
-        if (!res.ok) throw new Error('Erro ao alterar status na nuvem.');
+        if (!res || !res.ok) throw new Error((res && res.error) || 'Erro ao alterar status na nuvem.');
         return;
       }
 
@@ -236,15 +243,11 @@
 
     async deleteKey(id) {
       if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
-        const res = await fetch(`${cfg.url}/rest/v1/chaves_acesso?id=eq.${id}`, {
-          method: 'DELETE',
-          headers: {
-            'apikey': cfg.key,
-            'Authorization': `Bearer ${cfg.key}`
-          }
+        const res = await this.callRpc('admin_excluir_chave', {
+          p_admin_hash: this.getAdminToken(),
+          p_id: id
         });
-        if (!res.ok) throw new Error('Erro ao excluir na nuvem.');
+        if (!res || !res.ok) throw new Error((res && res.error) || 'Erro ao excluir na nuvem.');
         return;
       }
 
@@ -254,106 +257,43 @@
     },
 
     async getMaintenanceMode() {
-      if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
-        try {
-          const res = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.modo_manutencao&select=valor`, {
-            headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.length) return data[0].valor === 'true';
-          }
-        } catch (e) {}
-      }
-      return localStorage.getItem('subinova_modo_manutencao') === 'true';
+      const bundle = await this.fetchAdminBundle();
+      return Boolean(bundle.modo_manutencao);
     },
 
     async setMaintenanceMode(val) {
       if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
-        await fetch(`${cfg.url}/rest/v1/configuracoes`, {
-          method: 'POST',
-          headers: {
-            'apikey': cfg.key,
-            'Authorization': `Bearer ${cfg.key}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'resolution=merge-duplicates'
-          },
-          body: JSON.stringify({ chave: 'modo_manutencao', valor: String(val) })
+        await this.callRpc('admin_salvar_configuracoes', {
+          p_admin_hash: this.getAdminToken(),
+          p_modo_manutencao: Boolean(val)
         });
       }
       localStorage.setItem('subinova_modo_manutencao', String(val));
     },
 
-    async getAdminHash() {
+    async setAdminHash(newHash) {
+      localStorage.setItem('subinova_admin_hash', newHash);
       if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
-        try {
-          const res = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.admin_hash&select=valor`, {
-            headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.length && data[0].valor) {
-              const cloudVal = data[0].valor;
-              localStorage.setItem('subinova_admin_hash', cloudVal);
-              return cloudVal;
-            }
-          }
-        } catch (e) {
-          console.warn('Erro ao buscar admin_hash na nuvem:', e);
-        }
-      }
-
-      const stored = localStorage.getItem('subinova_admin_hash');
-      if (!stored || stored === '1097e8b623cf5ab862c95359b35e0762cf39b4b0df16ff1a051515ef50b1069f') {
-        return DEFAULT_ADMIN_HASH;
-      }
-      return stored;
-    },
-
-    async setAdminHash(h) {
-      localStorage.setItem('subinova_admin_hash', h);
-      if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
-        const res = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=eq.admin_hash`, {
-          method: 'PATCH',
-          headers: {
-            'apikey': cfg.key,
-            'Authorization': `Bearer ${cfg.key}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify({ valor: h })
+        const res = await this.callRpc('admin_salvar_configuracoes', {
+          p_admin_hash: this.getAdminToken(),
+          p_novo_admin_hash: newHash
         });
-        if (!res.ok) {
-          await fetch(`${cfg.url}/rest/v1/configuracoes`, {
-            method: 'POST',
-            headers: {
-              'apikey': cfg.key,
-              'Authorization': `Bearer ${cfg.key}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ chave: 'admin_hash', valor: h })
-          }).catch(() => {});
+        if (!res || !res.ok) {
+          throw new Error((res && res.error) || 'Erro ao atualizar senha na nuvem.');
         }
       }
+      this.setAdminToken(newHash);
     },
 
     async fetchLogs() {
       if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
         try {
-          const res = await fetch(`${cfg.url}/rest/v1/logs_acesso?select=*&order=criado_em.desc&limit=250`, {
-            headers: {
-              'apikey': cfg.key,
-              'Authorization': `Bearer ${cfg.key}`
-            }
+          const data = await this.callRpc('admin_listar_logs', {
+            p_admin_hash: this.getAdminToken(),
+            p_limite: 250
           });
-          if (res.ok) {
-            const data = await res.json();
-            return data;
+          if (data && data.ok && Array.isArray(data.logs)) {
+            return data.logs;
           }
         } catch (e) {
           console.warn('Erro ao buscar logs da nuvem:', e);
@@ -368,28 +308,10 @@
     },
 
     async getBannerConfig() {
-      if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
-        try {
-          const res = await fetch(`${cfg.url}/rest/v1/configuracoes?chave=in.(banner_ativo,banner_mensagem)&select=chave,valor`, {
-            headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            let ativo = false;
-            let mensagem = '';
-            data.forEach(item => {
-              if (item.chave === 'banner_ativo') ativo = item.valor === 'true';
-              if (item.chave === 'banner_mensagem') mensagem = item.valor || '';
-            });
-            return { ativo, mensagem };
-          }
-        } catch (e) {}
-      }
-
+      const bundle = await this.fetchAdminBundle();
       return {
-        ativo: localStorage.getItem('subinova_banner_ativo') === 'true',
-        mensagem: localStorage.getItem('subinova_banner_msg') || ''
+        ativo: Boolean(bundle.banner_ativo),
+        mensagem: bundle.banner_mensagem || ''
       };
     },
 
@@ -398,22 +320,14 @@
       localStorage.setItem('subinova_banner_msg', mensagem);
 
       if (this.isCloudEnabled()) {
-        const cfg = this.getCloudConfig();
-        const payload = [
-          { chave: 'banner_ativo', valor: String(ativo) },
-          { chave: 'banner_mensagem', valor: mensagem }
-        ];
-
-        await fetch(`${cfg.url}/rest/v1/configuracoes`, {
-          method: 'POST',
-          headers: {
-            'apikey': cfg.key,
-            'Authorization': `Bearer ${cfg.key}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'resolution=merge-duplicates'
-          },
-          body: JSON.stringify(payload)
-        }).catch(() => {});
+        const res = await this.callRpc('admin_salvar_configuracoes', {
+          p_admin_hash: this.getAdminToken(),
+          p_banner_ativo: Boolean(ativo),
+          p_banner_mensagem: mensagem
+        });
+        if (!res || !res.ok) {
+          throw new Error((res && res.error) || 'Erro ao salvar comunicado.');
+        }
       }
     }
   };
@@ -504,7 +418,7 @@
   tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       const targetTab = btn.getAttribute('data-tab');
-      
+
       tabBtns.forEach(b => b.classList.remove('active'));
       tabPanes.forEach(p => p.classList.add('hidden'));
 
@@ -532,10 +446,10 @@
     if (!val) return;
 
     const h = await computeSHA256(val);
-    const expected = await Storage.getAdminHash();
+    const isOk = await Storage.verifyAdminLogin(h);
 
-    if (h === expected || (expected === DEFAULT_ADMIN_HASH && val === '@admin3293')) {
-      sessionStorage.setItem('subinova_admin_logged', '1');
+    if (isOk) {
+      Storage.setAdminToken(h);
       adminLoginError.classList.remove('visible');
       showDashboard();
     } else {
@@ -549,7 +463,6 @@
     dashScreen.classList.remove('hidden');
     updateCloudStatusUI();
     renderDashboard();
-    // Pré-carrega logs em segundo plano para badges
     Storage.fetchLogs().then(logs => {
       currentLogsCache = logs;
       if (tabLogsBadge) tabLogsBadge.textContent = logs.length;
@@ -557,7 +470,7 @@
   }
 
   function logout() {
-    sessionStorage.removeItem('subinova_admin_logged');
+    Storage.setAdminToken(null);
     dashScreen.classList.add('hidden');
     loginScreen.classList.remove('hidden');
     adminPassInput.value = '';
@@ -569,15 +482,21 @@
     checkAdminLogin();
   });
 
-  adminPassInput.addEventListener('input', async () => {
+  let adminInputTimer = null;
+  adminPassInput.addEventListener('input', () => {
     adminLoginError.classList.remove('visible');
+    clearTimeout(adminInputTimer);
     const val = adminPassInput.value.trim();
-    if (val.length >= 5) {
-      const h = await computeSHA256(val);
-      const expected = await Storage.getAdminHash();
-      if (h === expected || (expected === DEFAULT_ADMIN_HASH && val === '@admin3293')) {
-        checkAdminLogin();
-      }
+    if (val.length >= 6) {
+      adminInputTimer = setTimeout(async () => {
+        const h = await computeSHA256(val);
+        const isOk = await Storage.verifyAdminLogin(h);
+        if (isOk) {
+          Storage.setAdminToken(h);
+          adminLoginError.classList.remove('visible');
+          showDashboard();
+        }
+      }, 300);
     }
   });
 
@@ -594,7 +513,7 @@
   function updateCloudStatusUI() {
     if (Storage.isCloudEnabled()) {
       syncBadge.classList.add('cloud-connected');
-      syncText.textContent = 'Nuvem Conectada';
+      syncText.textContent = 'Nuvem Conectada (RLS Blindado)';
     } else {
       syncBadge.classList.remove('cloud-connected');
       syncText.textContent = 'Modo Local (Offline)';
@@ -612,10 +531,10 @@
   }
 
   async function renderDashboard() {
-    const keys = await Storage.fetchKeys();
-    const isMaint = await Storage.getMaintenanceMode();
+    const bundle = await Storage.fetchAdminBundle();
+    const keys = bundle.chaves || [];
+    const isMaint = Boolean(bundle.modo_manutencao);
 
-    // Atualiza KPIs
     const total = keys.length;
     const active = keys.filter(k => k.ativa).length;
     const blocked = total - active;
@@ -632,7 +551,6 @@
       kpiMaintenance.classList.remove('active-maintenance');
     }
 
-    // Renderiza Tabela de Chaves
     keysTableBody.innerHTML = '';
     if (keys.length === 0) {
       keysTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b;">Nenhuma chave cadastrada. Clique em "Criar Nova Chave" para começar.</td></tr>`;
@@ -646,7 +564,6 @@
       const maskVal = '••••••••';
       const realVal = k.chave;
 
-      // Validação de expiração ou limite
       let isExpired = false;
       let isLimitReached = false;
       let validityHtml = '<span style="color:#64748b; font-size:11.5px;">Vitalícia / Ilimitada</span>';
@@ -676,12 +593,12 @@
         <td>
           <span class="key-code" data-id="${k.id}">
             <span class="key-text">${maskVal}</span>
-            <button type="button" class="btn-icon-reveal" title="Ver / Ocultar Chave" data-val="${realVal}">
+            <button type="button" class="btn-icon-reveal" title="Ver / Ocultar Chave" data-val="${escapeHtml(realVal)}">
               👁
             </button>
           </span>
         </td>
-        <td><b class="key-label-text">${k.rotulo || 'Sem identificador'}</b></td>
+        <td><b class="key-label-text">${escapeHtml(k.rotulo || 'Sem identificador')}</b></td>
         <td style="color:#94a3b8; font-size:12px;">${formatDate(k.criada_em)}</td>
         <td>${validityHtml}</td>
         <td style="color:#94a3b8; font-size:12px;">${formatDate(k.ultimo_acesso)}</td>
@@ -714,7 +631,6 @@
   }
 
   function attachTableEvents() {
-    // Revelar / Ocultar Chave
     document.querySelectorAll('.btn-icon-reveal').forEach((btn) => {
       btn.onclick = () => {
         const textSpan = btn.parentElement.querySelector('.key-text');
@@ -729,7 +645,6 @@
       };
     });
 
-    // Alternar Status (Bloquear / Ativar)
     document.querySelectorAll('[data-act="toggle"]').forEach((btn) => {
       btn.onclick = async () => {
         const id = btn.getAttribute('data-id');
@@ -746,7 +661,6 @@
       };
     });
 
-    // Excluir Chave
     document.querySelectorAll('[data-act="delete"]').forEach((btn) => {
       btn.onclick = async () => {
         const id = btn.getAttribute('data-id');
@@ -758,7 +672,6 @@
     });
   }
 
-  // Alternar Modo Manutenção
   chkMaintenance.addEventListener('change', async () => {
     const isMaint = chkMaintenance.checked;
     await Storage.setMaintenanceMode(isMaint);
@@ -781,11 +694,9 @@
     const statusFilter = logFilterStatus.value;
 
     let filtered = currentLogsCache.filter(item => {
-      // Filtro de status
       if (statusFilter === 'success' && !item.sucesso) return false;
       if (statusFilter === 'failed' && item.sucesso) return false;
 
-      // Filtro de texto
       if (!term) return true;
       const haystack = [
         item.ip,
@@ -822,8 +733,8 @@
         statusBadge = `<span class="status-pill failed">Negado</span>`;
       }
 
-      const cityDisplay = log.cidade && log.cidade !== 'N/A' 
-        ? `${log.cidade}${log.regiao ? ', ' + log.regiao : ''}` 
+      const cityDisplay = log.cidade && log.cidade !== 'N/A'
+        ? `${log.cidade}${log.regiao ? ', ' + log.regiao : ''}`
         : (log.pais || 'Brasil');
 
       tr.innerHTML = `
@@ -866,7 +777,6 @@
   logFilterStatus.addEventListener('change', applyLogsFilter);
   btnRefreshLogs.addEventListener('click', renderLogsView);
 
-  // Exportar para Excel / CSV
   function exportLogsCSV() {
     if (!currentLogsCache || currentLogsCache.length === 0) {
       alert('Não há registros para exportar.');
@@ -956,7 +866,6 @@
     const days = [];
     const now = new Date();
 
-    // Cria os últimos 7 dias
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
@@ -1098,7 +1007,6 @@
     };
   });
 
-  // Modal: Nova Chave
   btnOpenNewKey.addEventListener('click', () => {
     keyInputVal.value = '';
     keyInputLabel.value = '';
@@ -1155,7 +1063,6 @@
     }
   });
 
-  // Modal: Conexão em Nuvem
   btnOpenCloud.addEventListener('click', () => {
     const cfg = Storage.getCloudConfig();
     cloudUrl.value = cfg ? cfg.url : '';
@@ -1168,14 +1075,20 @@
     const u = cloudUrl.value.trim();
     const k = cloudKey.value.trim();
     cloudFeedback.className = 'feedback-msg';
-    cloudFeedback.textContent = 'Testando conexão com Supabase...';
+    cloudFeedback.textContent = 'Testando conexão segura RPC com Supabase...';
     try {
-      const res = await fetch(`${u}/rest/v1/chaves_acesso?limit=1`, {
-        headers: { 'apikey': k, 'Authorization': `Bearer ${k}` }
+      const res = await fetch(`${u}/rest/v1/rpc/obter_status_portal`, {
+        method: 'POST',
+        headers: {
+          'apikey': k,
+          'Authorization': `Bearer ${k}`,
+          'Content-Type': 'application/json'
+        },
+        body: '{}'
       });
       if (res.ok) {
         cloudFeedback.className = 'feedback-msg success';
-        cloudFeedback.textContent = '✅ Conexão estabelecida com sucesso! Tabelas encontradas.';
+        cloudFeedback.textContent = '✅ Conexão blindada estabelecida com sucesso!';
       } else {
         cloudFeedback.className = 'feedback-msg error';
         cloudFeedback.textContent = `❌ Erro (${res.status}): Verifique se executou o script supabase_setup.sql no banco.`;
@@ -1207,7 +1120,6 @@
     renderDashboard();
   });
 
-  // Modal: Senha ADM
   btnOpenAdminPass.addEventListener('click', () => {
     newAdminPass.value = '';
     confirmAdminPass.value = '';
@@ -1223,17 +1135,21 @@
       adminPassError.classList.add('visible');
       return;
     }
-    const h = await computeSHA256(p1);
-    await Storage.setAdminHash(h);
-    closeModal(modalAdminPass);
-    alert('Senha de administrador atualizada com sucesso na nuvem!');
+    try {
+      const h = await computeSHA256(p1);
+      await Storage.setAdminHash(h);
+      closeModal(modalAdminPass);
+      alert('Senha de administrador atualizada com sucesso na nuvem!');
+    } catch (err) {
+      alert('Erro ao atualizar senha: ' + err.message);
+    }
   });
 
   /* ==========================================================================
      STARTUP
      ========================================================================== */
   window.addEventListener('DOMContentLoaded', () => {
-    if (sessionStorage.getItem('subinova_admin_logged') === '1') {
+    if (Storage.getAdminToken()) {
       showDashboard();
     } else {
       adminPassInput.focus();
