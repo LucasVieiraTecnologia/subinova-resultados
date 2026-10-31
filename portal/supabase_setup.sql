@@ -31,7 +31,8 @@ VALUES
     ('modo_manutencao', 'false'),
     ('mensagem_manutencao', 'Painel temporariamente indisponível para atualização.'),
     ('banner_ativo', 'false'),
-    ('banner_mensagem', 'Bem-vindo ao Portal de Resultados SUBINOVA.')
+    ('banner_mensagem', 'Bem-vindo ao Portal de Resultados SUBINOVA.'),
+    ('pbi_url', 'https://app.powerbi.com/view?r=eyJrIjoiNTgwNTFlOTctODk2OC00ZjFmLWIwZDUtMjg4ZmFhMDgyOGNkIiwidCI6ImU1ZDNhZTdjLTliMzgtNDhkZS1hMDg3LWY2NzM0YTI4NzU3NCJ9')
 ON CONFLICT (chave) DO NOTHING;
 
 -- 3. Tabela de Logs de Acesso e Auditoria (IP, Geolocalização, Dispositivo)
