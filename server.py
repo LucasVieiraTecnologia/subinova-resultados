@@ -26,14 +26,18 @@ class RobustRangeRequestHandler(BaseHTTPRequestHandler):
         clean_path = path.split('?', 1)[0].split('#', 1)[0]
         if clean_path in ('', '/'):
             clean_path = '/index.html'
+        parts = [p for p in clean_path.split('/') if p]
+        blocked_names = {'server.py', 'iniciar.bat', 'supabase_setup.sql'}
+        if any(p.startswith('.') or p.lower() in blocked_names for p in parts):
+            return None
         local_path = os.path.normpath(os.path.join(DIRECTORY, clean_path.lstrip('/')))
         if not local_path.startswith(DIRECTORY):
             return None
         return local_path
 
     def end_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Headers', '*')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('X-Frame-Options', 'SAMEORIGIN')
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -120,7 +124,7 @@ def run():
     servers = []
     for port in [3000, 8080]:
         try:
-            httpd = ThreadingHTTPServer(('0.0.0.0', port), RobustRangeRequestHandler)
+            httpd = ThreadingHTTPServer(('127.0.0.1', port), RobustRangeRequestHandler)
             servers.append((port, httpd))
             print(f" Servidor ativo em: http://localhost:{port}")
         except Exception as e:

@@ -182,9 +182,6 @@
     return { ip: 'Desconhecido', cidade: 'N/A', regiao: 'N/A', pais: 'Brasil', provedor: 'N/A' };
   }
 
-  // Pré-carrega informações de IP em segundo plano sem bloquear a interface
-  fetchIpLocation().catch(() => {});
-
   /* ==========================================================================
      PROTEÇÃO CONTRA FORÇA BRUTA (BLOQUEIO TEMPORÁRIO APÓS 5 FALHAS)
      ========================================================================== */
@@ -399,7 +396,7 @@
   /* ==========================================================================
      VALIDAÇÃO DA SENHA & LIBERAÇÃO DO POWER BI
      ========================================================================== */
-  async function validateAccessKey(password, { silent = false } = {}) {
+  async function validateAccessKey(password) {
     if (!password) return { ok: false, error: 'Digite uma senha.' };
 
     const sec = Security.getState();
@@ -407,21 +404,18 @@
       return { ok: false, error: 'Acesso temporariamente bloqueado por excesso de tentativas.' };
     }
 
-    const result = await KeyStore.validateServerSide(password, !silent);
+    const result = await KeyStore.validateServerSide(password, true);
 
     if (result && result.ok) {
       Security.reset();
       return { ok: true, pbi_url: result.pbi_url };
     }
 
-    if (silent) {
-      return { ok: false };
-    }
-
     const afterFail = Security.recordFailure();
-    if (afterFail.isLocked) {
-      startLockoutCountdown(afterFail.lockedUntil);
-      return { ok: false, error: 'Limite de 5 tentativas atingido. Bloqueado por 3 minutos.' };
+    if (afterFail.isLocked || (result && result.locked)) {
+      const lockUntil = afterFail.lockedUntil || (Date.now() + Security.LOCK_DURATION_MS);
+      startLockoutCountdown(lockUntil);
+      return { ok: false, error: (result && result.error) || 'Limite de 5 tentativas atingido. Bloqueado por 3 minutos.' };
     }
 
     const baseErr = (result && result.error) ? result.error : 'Senha incorreta.';
@@ -470,11 +464,23 @@
   async function trySubmit() {
     const val = passwordInput.value.trim();
     if (!val) return;
-    const res = await validateAccessKey(val, { silent: false });
-    if (res.ok) {
-      handleAuthSuccess(res.pbi_url);
-    } else if (res.error) {
-      handleAuthError(res.error);
+    const submitBtn = document.getElementById('btn-auth-submit');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Verificando...';
+    }
+    try {
+      const res = await validateAccessKey(val);
+      if (res.ok) {
+        handleAuthSuccess(res.pbi_url);
+      } else if (res.error) {
+        handleAuthError(res.error);
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Acessar Painel';
+      }
     }
   }
 
@@ -525,27 +531,12 @@
     }, 4200);
   }
 
-  let inputTimer = null;
   passwordInput.addEventListener('input', () => {
     authError.classList.remove('visible');
-    const val = passwordInput.value.trim();
-
-    clearTimeout(inputTimer);
-    if (val.length >= 4) {
-      inputTimer = setTimeout(async () => {
-        const sec = Security.getState();
-        if (sec.isLocked) return;
-        const res = await validateAccessKey(val, { silent: true });
-        if (res.ok) {
-          handleAuthSuccess(res.pbi_url);
-        }
-      }, 250);
-    }
   });
 
   authForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    clearTimeout(inputTimer);
     trySubmit();
   });
 

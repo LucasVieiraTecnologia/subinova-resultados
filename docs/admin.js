@@ -482,22 +482,8 @@
     checkAdminLogin();
   });
 
-  let adminInputTimer = null;
   adminPassInput.addEventListener('input', () => {
     adminLoginError.classList.remove('visible');
-    clearTimeout(adminInputTimer);
-    const val = adminPassInput.value.trim();
-    if (val.length >= 6) {
-      adminInputTimer = setTimeout(async () => {
-        const h = await computeSHA256(val);
-        const isOk = await Storage.verifyAdminLogin(h);
-        if (isOk) {
-          Storage.setAdminToken(h);
-          adminLoginError.classList.remove('visible');
-          showDashboard();
-        }
-      }, 300);
-    }
   });
 
   adminToggleEye.addEventListener('click', () => {
@@ -1018,10 +1004,20 @@
   });
 
   btnGenerateKey.addEventListener('click', () => {
-    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    const bytes = new Uint8Array(8);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < 8; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    let token = '';
+    for (let i = 0; i < 8; i++) {
+      token += chars[bytes[i] % chars.length];
+    }
     const prefixes = ['@subinova', '@sede', '@acesso', '@minas', '@inova'];
-    const p = prefixes[Math.floor(Math.random() * prefixes.length)];
-    keyInputVal.value = `${p}${randNum}`;
+    const p = prefixes[bytes[0] % prefixes.length];
+    keyInputVal.value = `${p}-${token}`;
   });
 
   formKey.addEventListener('submit', async (e) => {
