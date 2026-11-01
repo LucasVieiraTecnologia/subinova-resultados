@@ -712,13 +712,17 @@
     if (isDevToolsTriggered) return;
     isDevToolsTriggered = true;
 
-    // Descarrega imediatamente o Power BI para about:blank
-    if (pbiIframe) {
-      pbiIframe.src = 'about:blank';
-    }
-    if (pbiLayer) {
-      pbiLayer.classList.remove('active');
-    }
+    // Descarrega e destrói imediatamente o Power BI do DOM
+    try {
+      if (pbiIframe) {
+        pbiIframe.src = 'about:blank';
+        pbiIframe.remove();
+      }
+      if (pbiLayer) {
+        pbiLayer.innerHTML = '';
+        pbiLayer.classList.remove('active');
+      }
+    } catch (e) {}
 
     // Exibe o modal de segurança
     if (securityAlertModal) {
@@ -730,7 +734,7 @@
     const dev = getClientDeviceInfo();
     sendAlertNotification(
       `🚨 VIOLAÇÃO: Inspeção F12 / DevTools`,
-      `Alguém tentou inspecionar o código do portal!\nIP: ${ipDisp}\nDispositivo: ${dev.os} · ${dev.browser}\nO Power BI foi imediatamente descarregado.`,
+      `Alguém tentou inspecionar o código do portal!\nIP: ${ipDisp}\nDispositivo: ${dev.os} · ${dev.browser}\nO Power BI foi imediatamente descarregado e destruído.`,
       'rotating_light,skull',
       'urgent'
     );
@@ -786,17 +790,39 @@
     }
   }, true);
 
-  // 3. Monitor contínuo do DevTools acoplado à janela
+  // 3. Monitor Multi-Camada de DevTools (Console Getter + Delta de Janela + Debugger Loop)
+  const devtoolsObj = new Image();
+  Object.defineProperty(devtoolsObj, 'id', {
+    get: function () {
+      triggerSecurityLockout();
+    }
+  });
+
+  let initialDiffW = Math.abs(window.outerWidth - window.innerWidth);
+  let initialDiffH = Math.abs(window.outerHeight - window.innerHeight);
+
   setInterval(() => {
     if (isDevToolsTriggered) return;
-    const widthDiff = window.outerWidth - window.innerWidth;
-    const heightDiff = window.outerHeight - window.innerHeight;
-    if (widthDiff > 180 || heightDiff > 180) {
-      if (pbiLayer && pbiLayer.classList.contains('active')) {
-        triggerSecurityLockout();
-      }
+
+    // Técnica A: Avaliação do console pelo inspetor
+    console.dir(devtoolsObj);
+
+    // Técnica B: Variação de tamanho da janela (Detecção de DevTools acoplado)
+    const curDiffW = Math.abs(window.outerWidth - window.innerWidth);
+    const curDiffH = Math.abs(window.outerHeight - window.innerHeight);
+    if (Math.abs(curDiffW - initialDiffW) > 85 || Math.abs(curDiffH - initialDiffH) > 85) {
+      triggerSecurityLockout();
+      return;
     }
-  }, 700);
+
+    // Técnica C: Verificação de atraso / parada no debugger
+    const t0 = performance.now();
+    debugger;
+    const t1 = performance.now();
+    if (t1 - t0 > 80) {
+      triggerSecurityLockout();
+    }
+  }, 400);
 
   window.addEventListener('click', () => {
     if (!modalOpened) {
