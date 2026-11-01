@@ -1,6 +1,7 @@
 -- ============================================================================
 -- BANCO DE DADOS EM NUVEM BLINDADO (SUPABASE / POSTGRESQL)
 -- Portal de Resultados SUBINOVA · Arquitetura RPC + RLS Restrito
+-- Versão 3.4.0 (Anti-Print, Ban de IP, Sessão Inteligente & Links de 1-Clique)
 -- ============================================================================
 
 -- 1. Tabela de Chaves de Acesso
@@ -12,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.chaves_acesso (
     ativa BOOLEAN NOT NULL DEFAULT true,
     expira_em TIMESTAMPTZ,
     limite_usos INTEGER,
+    sessao_ilimitada BOOLEAN NOT NULL DEFAULT false,
     criada_em TIMESTAMPTZ DEFAULT NOW(),
     ultimo_acesso TIMESTAMPTZ,
     total_usos INTEGER DEFAULT 0
@@ -19,6 +21,7 @@ CREATE TABLE IF NOT EXISTS public.chaves_acesso (
 
 ALTER TABLE public.chaves_acesso ADD COLUMN IF NOT EXISTS expira_em TIMESTAMPTZ;
 ALTER TABLE public.chaves_acesso ADD COLUMN IF NOT EXISTS limite_usos INTEGER;
+ALTER TABLE public.chaves_acesso ADD COLUMN IF NOT EXISTS sessao_ilimitada BOOLEAN NOT NULL DEFAULT false;
 
 -- 2. Tabela de Configurações Gerais
 CREATE TABLE IF NOT EXISTS public.configuracoes (
@@ -52,11 +55,20 @@ CREATE TABLE IF NOT EXISTS public.logs_acesso (
     criado_em TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. Políticas de Segurança Restritas (Row Level Security - RLS Blindado)
+-- 4. Tabela de IPs Bloqueados / Banidos
+CREATE TABLE IF NOT EXISTS public.ips_bloqueados (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    ip TEXT NOT NULL UNIQUE,
+    motivo TEXT,
+    criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. Políticas de Segurança Restritas (Row Level Security - RLS Blindado)
 -- Bloqueia acesso direto via REST às tabelas; toda leitura/escrita ocorre via RPC SECURITY DEFINER
 ALTER TABLE public.chaves_acesso ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.configuracoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.logs_acesso ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ips_bloqueados ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Acesso total a chaves" ON public.chaves_acesso;
 DROP POLICY IF EXISTS "Acesso público a configurações" ON public.configuracoes;
@@ -64,12 +76,14 @@ DROP POLICY IF EXISTS "Acesso total a logs" ON public.logs_acesso;
 DROP POLICY IF EXISTS "Bloqueio direto chaves" ON public.chaves_acesso;
 DROP POLICY IF EXISTS "Bloqueio direto configuracoes" ON public.configuracoes;
 DROP POLICY IF EXISTS "Bloqueio direto logs" ON public.logs_acesso;
+DROP POLICY IF EXISTS "Bloqueio direto ips_bloqueados" ON public.ips_bloqueados;
 
 CREATE POLICY "Bloqueio direto chaves" ON public.chaves_acesso FOR ALL USING (false) WITH CHECK (false);
 CREATE POLICY "Bloqueio direto configuracoes" ON public.configuracoes FOR ALL USING (false) WITH CHECK (false);
 CREATE POLICY "Bloqueio direto logs" ON public.logs_acesso FOR ALL USING (false) WITH CHECK (false);
+CREATE POLICY "Bloqueio direto ips_bloqueados" ON public.ips_bloqueados FOR ALL USING (false) WITH CHECK (false);
 
--- 5. Funções RPC Blindadas (SECURITY DEFINER)
+-- 6. Funções RPC Blindadas (SECURITY DEFINER)
 CREATE OR REPLACE FUNCTION public.verificar_admin(p_admin_hash text)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -138,10 +152,23 @@ DECLARE
     v_pbi_url text;
     v_match public.chaves_acesso%ROWTYPE;
     v_clean text;
+    v_ip_bloqueado boolean := false;
 BEGIN
     v_clean := trim(COALESCE(p_chave, ''));
     IF length(v_clean) = 0 THEN
         RETURN jsonb_build_object('ok', false, 'error', 'Digite uma senha.');
+    END IF;
+
+    -- Verificação de IP Bloqueado
+    IF p_ip IS NOT NULL AND p_ip <> 'N/A' AND p_ip <> '' THEN
+        SELECT EXISTS(SELECT 1 FROM public.ips_bloqueados WHERE ip = trim(p_ip)) INTO v_ip_bloqueado;
+        IF v_ip_bloqueado THEN
+            IF p_registrar_falha THEN
+                INSERT INTO public.logs_acesso (chave, rotulo, sucesso, ip, cidade, regiao, pais, provedor, dispositivo, navegador, detalhes)
+                VALUES (v_clean, 'IP Bloqueado', false, p_ip, p_cidade, p_regiao, p_pais, p_provedor, p_dispositivo, p_navegador, 'Acesso bloqueado: IP banido pelo Administrador');
+            END IF;
+            RETURN jsonb_build_object('ok', false, 'error', 'Acesso bloqueado por segurança para o seu endereço IP.');
+        END IF;
     END IF;
 
     SELECT valor INTO v_manut FROM public.configuracoes WHERE chave = 'modo_manutencao';
@@ -203,7 +230,9 @@ BEGIN
     RETURN jsonb_build_object(
         'ok', true,
         'rotulo', v_match.rotulo,
-        'pbi_url', COALESCE(v_pbi_url, '')
+        'pbi_url', COALESCE(v_pbi_url, ''),
+        'sessao_ilimitada', COALESCE(v_match.sessao_ilimitada, false),
+        'ip', p_ip
     );
 END;
 $$;
@@ -231,6 +260,7 @@ SET search_path = public
 AS $$
 DECLARE
     v_chaves jsonb;
+    v_ips_bloqueados jsonb;
     v_manut boolean := false;
     v_banner boolean := false;
     v_banner_msg text := '';
@@ -242,10 +272,17 @@ BEGIN
 
     SELECT COALESCE(jsonb_agg(t), '[]'::jsonb) INTO v_chaves
     FROM (
-        SELECT id, chave, chave_hash, rotulo, ativa, expira_em, limite_usos, criada_em, ultimo_acesso, total_usos
+        SELECT id, chave, chave_hash, rotulo, ativa, expira_em, limite_usos, sessao_ilimitada, criada_em, ultimo_acesso, total_usos
         FROM public.chaves_acesso
         ORDER BY criada_em DESC
     ) t;
+
+    SELECT COALESCE(jsonb_agg(b), '[]'::jsonb) INTO v_ips_bloqueados
+    FROM (
+        SELECT id, ip, motivo, criado_em
+        FROM public.ips_bloqueados
+        ORDER BY criado_em DESC
+    ) b;
 
     FOR rec IN SELECT chave, valor FROM public.configuracoes WHERE chave IN ('modo_manutencao', 'banner_ativo', 'banner_mensagem') LOOP
         IF rec.chave = 'modo_manutencao' THEN v_manut := (rec.valor = 'true'); END IF;
@@ -256,6 +293,7 @@ BEGIN
     RETURN jsonb_build_object(
         'ok', true,
         'chaves', v_chaves,
+        'ips_bloqueados', v_ips_bloqueados,
         'modo_manutencao', v_manut,
         'banner_ativo', v_banner,
         'banner_mensagem', v_banner_msg
@@ -295,7 +333,8 @@ CREATE OR REPLACE FUNCTION public.admin_salvar_chave(
     p_rotulo text,
     p_ativa boolean DEFAULT true,
     p_expira_em timestamptz DEFAULT NULL,
-    p_limite_usos integer DEFAULT NULL
+    p_limite_usos integer DEFAULT NULL,
+    p_sessao_ilimitada boolean DEFAULT false
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -307,14 +346,62 @@ BEGIN
         RETURN jsonb_build_object('ok', false, 'error', 'Acesso negado.');
     END IF;
 
-    INSERT INTO public.chaves_acesso (chave, chave_hash, rotulo, ativa, expira_em, limite_usos)
-    VALUES (trim(p_chave), p_chave_hash, trim(p_rotulo), COALESCE(p_ativa, true), p_expira_em, p_limite_usos)
+    INSERT INTO public.chaves_acesso (chave, chave_hash, rotulo, ativa, expira_em, limite_usos, sessao_ilimitada)
+    VALUES (trim(p_chave), p_chave_hash, trim(p_rotulo), COALESCE(p_ativa, true), p_expira_em, p_limite_usos, COALESCE(p_sessao_ilimitada, false))
     ON CONFLICT (chave) DO UPDATE
     SET chave_hash = EXCLUDED.chave_hash,
         rotulo = EXCLUDED.rotulo,
         ativa = EXCLUDED.ativa,
         expira_em = EXCLUDED.expira_em,
-        limite_usos = EXCLUDED.limite_usos;
+        limite_usos = EXCLUDED.limite_usos,
+        sessao_ilimitada = EXCLUDED.sessao_ilimitada;
+
+    RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.admin_banir_ip(
+    p_admin_hash text,
+    p_ip text,
+    p_motivo text DEFAULT 'Bloqueado pelo Administrador'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    IF NOT public.verificar_admin(p_admin_hash) THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'Acesso negado.');
+    END IF;
+
+    IF p_ip IS NULL OR length(trim(p_ip)) = 0 THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'IP inválido.');
+    END IF;
+
+    INSERT INTO public.ips_bloqueados (ip, motivo)
+    VALUES (trim(p_ip), COALESCE(p_motivo, 'Bloqueado pelo Administrador'))
+    ON CONFLICT (ip) DO UPDATE SET motivo = EXCLUDED.motivo;
+
+    RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.admin_desbanir_ip(
+    p_admin_hash text,
+    p_ip text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    IF NOT public.verificar_admin(p_admin_hash) THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'Acesso negado.');
+    END IF;
+
+    DELETE FROM public.ips_bloqueados WHERE ip = trim(p_ip);
 
     RETURN jsonb_build_object('ok', true);
 END;

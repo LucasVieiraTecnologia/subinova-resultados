@@ -169,6 +169,9 @@
             p_admin_hash: this.getAdminToken()
           });
           if (data && data.ok) {
+            if (Array.isArray(data.ips_bloqueados)) {
+              currentBlockedIpsCache = data.ips_bloqueados.map(b => b.ip);
+            }
             return data;
           }
           if (data && data.error === 'Acesso negado.') {
@@ -207,7 +210,8 @@
           p_rotulo: item.rotulo,
           p_ativa: Boolean(item.ativa),
           p_expira_em: item.expira_em || null,
-          p_limite_usos: item.limite_usos ? Number(item.limite_usos) : null
+          p_limite_usos: item.limite_usos ? Number(item.limite_usos) : null,
+          p_sessao_ilimitada: Boolean(item.sessao_ilimitada)
         });
         if (!res || !res.ok) {
           throw new Error((res && res.error) || 'Não foi possível salvar a chave.');
@@ -220,6 +224,29 @@
       if (idx >= 0) keys[idx] = { ...keys[idx], ...item };
       else keys.unshift(item);
       localStorage.setItem(LOCAL_STORAGE_KEYS, JSON.stringify(keys));
+    },
+
+    async banIp(ip, motivo) {
+      if (this.isCloudEnabled()) {
+        const res = await this.callRpc('admin_banir_ip', {
+          p_admin_hash: this.getAdminToken(),
+          p_ip: ip,
+          p_motivo: motivo || 'Bloqueado pelo Administrador'
+        });
+        if (!res || !res.ok) throw new Error((res && res.error) || 'Erro ao banir IP.');
+        return;
+      }
+    },
+
+    async unbanIp(ip) {
+      if (this.isCloudEnabled()) {
+        const res = await this.callRpc('admin_desbanir_ip', {
+          p_admin_hash: this.getAdminToken(),
+          p_ip: ip
+        });
+        if (!res || !res.ok) throw new Error((res && res.error) || 'Erro ao desbanir IP.');
+        return;
+      }
     },
 
     async toggleKeyStatus(id, newStatus) {
@@ -370,6 +397,7 @@
   const btnRefreshLogs = document.getElementById('btn-refresh-logs');
   const logsTableBody = document.getElementById('logs-table-body');
   let currentLogsCache = [];
+  let currentBlockedIpsCache = [];
 
   // Aba 3: Analytics
   const analyticsTotal = document.getElementById('analytics-total-count');
@@ -396,6 +424,7 @@
   const keyInputExpire = document.getElementById('key-input-expire');
   const keyInputMaxUses = document.getElementById('key-input-max-uses');
   const keyInputActive = document.getElementById('key-input-active');
+  const keyInputUnlimitedSession = document.getElementById('key-input-unlimited-session');
   const btnGenerateKey = document.getElementById('btn-generate-key');
 
   const modalCloud = document.getElementById('modal-cloud');
@@ -584,7 +613,10 @@
             </button>
           </span>
         </td>
-        <td><b class="key-label-text">${escapeHtml(k.rotulo || 'Sem identificador')}</b></td>
+        <td>
+          <b class="key-label-text">${escapeHtml(k.rotulo || 'Sem identificador')}</b>
+          ${k.sessao_ilimitada ? '<div style="font-size:11px; color:#10b981; font-weight:600; margin-top:2px;">👑 Sessão Contínua (Chefe)</div>' : '<div style="font-size:11px; color:#64748b; margin-top:2px;">⏱️ F5 a cada 5 min</div>'}
+        </td>
         <td style="color:#94a3b8; font-size:12px;">${formatDate(k.criada_em)}</td>
         <td>${validityHtml}</td>
         <td style="color:#94a3b8; font-size:12px;">${formatDate(k.ultimo_acesso)}</td>
@@ -597,6 +629,9 @@
         </td>
         <td>
           <div class="row-actions">
+            <button type="button" class="btn-table-link" data-act="copy-link" data-key="${escapeHtml(realVal)}" title="Copiar Link de 1 Clique">
+              🔗 1-Clique
+            </button>
             <button type="button" class="${k.ativa ? 'btn-table-block' : 'btn-table-activate'}" data-act="toggle" data-id="${k.id}" data-status="${k.ativa}">
               ${k.ativa ? '🚫 Bloquear' : '✅ Ativar'}
             </button>
@@ -627,6 +662,24 @@
         } else {
           textSpan.textContent = '••••••••';
           btn.style.color = '#64748b';
+        }
+      };
+    });
+
+    document.querySelectorAll('[data-act="copy-link"]').forEach((btn) => {
+      btn.onclick = async () => {
+        const key = btn.getAttribute('data-key');
+        const url = new URL(window.location.href);
+        let basePath = url.pathname.substring(0, url.pathname.lastIndexOf('/') + 1);
+        if (!basePath) basePath = '/';
+        const accessUrl = `${url.origin}${basePath}index.html?k=${encodeURIComponent(key)}`;
+        try {
+          await navigator.clipboard.writeText(accessUrl);
+          const orig = btn.innerHTML;
+          btn.innerHTML = '✅ Copiado!';
+          setTimeout(() => { btn.innerHTML = orig; }, 2000);
+        } catch (e) {
+          prompt('Copie o link de 1 clique abaixo:', accessUrl);
         }
       };
     });
@@ -723,6 +776,10 @@
         ? `${log.cidade}${log.regiao ? ', ' + log.regiao : ''}`
         : (log.pais || 'Brasil');
 
+      const logIp = log.ip || '0.0.0.0';
+      const isBanned = currentBlockedIpsCache.includes(logIp);
+      const canBan = logIp && logIp !== '0.0.0.0' && logIp !== '127.0.0.1';
+
       tr.innerHTML = `
         <td style="color:#94a3b8; font-size:12px; white-space:nowrap;">${formatDate(log.criado_em)}</td>
         <td>
@@ -730,7 +787,16 @@
           ${log.rotulo && log.rotulo !== 'N/A' ? `<div style="font-size:11px; color:#64748b;">${escapeHtml(log.rotulo)}</div>` : ''}
         </td>
         <td>${statusBadge}</td>
-        <td><span class="ip-badge">${escapeHtml(log.ip || '0.0.0.0')}</span></td>
+        <td>
+          <div style="display:inline-flex; align-items:center;">
+            <span class="ip-badge" style="${isBanned ? 'background:rgba(239,68,68,0.2); color:#ef4444; border-color:#ef4444;' : ''}">${escapeHtml(logIp)}</span>
+            ${canBan ? `
+              <button type="button" class="btn-ban-ip ${isBanned ? 'is-banned' : ''}" data-act="ban-ip" data-ip="${escapeHtml(logIp)}" data-banned="${isBanned}" title="${isBanned ? 'Desbanir IP' : 'Bloquear IP'}">
+                ${isBanned ? 'Desbanir' : 'Banir'}
+              </button>
+            ` : ''}
+          </div>
+        </td>
         <td>
           <span class="location-text">
             <span>📍</span>
@@ -747,6 +813,35 @@
       `;
 
       logsTableBody.appendChild(tr);
+    });
+
+    logsTableBody.querySelectorAll('[data-act="ban-ip"]').forEach((btn) => {
+      btn.onclick = async () => {
+        const ip = btn.getAttribute('data-ip');
+        const isBanned = btn.getAttribute('data-banned') === 'true';
+        if (isBanned) {
+          if (confirm(`Deseja desbloquear o acesso para o IP ${ip}?`)) {
+            try {
+              await Storage.unbanIp(ip);
+              currentBlockedIpsCache = currentBlockedIpsCache.filter(item => item !== ip);
+              applyLogsFilter();
+            } catch (e) {
+              alert('Erro ao desbanir IP: ' + e.message);
+            }
+          }
+        } else {
+          const motivo = prompt(`Digite o motivo do banimento para o IP ${ip}:`, 'Tentativas suspeitas / Violação de segurança');
+          if (motivo !== null) {
+            try {
+              await Storage.banIp(ip, motivo);
+              if (!currentBlockedIpsCache.includes(ip)) currentBlockedIpsCache.push(ip);
+              applyLogsFilter();
+            } catch (e) {
+              alert('Erro ao banir IP: ' + e.message);
+            }
+          }
+        }
+      };
     });
   }
 
@@ -999,6 +1094,7 @@
     keyInputExpire.value = '';
     keyInputMaxUses.value = '';
     keyInputActive.checked = true;
+    if (keyInputUnlimitedSession) keyInputUnlimitedSession.checked = false;
     openModal(modalKey);
     keyInputVal.focus();
   });
@@ -1045,6 +1141,7 @@
       ativa: keyInputActive.checked,
       expira_em: expireVal,
       limite_usos: maxUsesVal,
+      sessao_ilimitada: keyInputUnlimitedSession ? keyInputUnlimitedSession.checked : false,
       criada_em: new Date().toISOString(),
       ultimo_acesso: null,
       total_usos: 0

@@ -26,6 +26,15 @@
       frameborder="0" 
       allowFullScreen="true"
     ></iframe>
+    <!-- Watermark Dinâmica Anti-Vazamento (Anti-Print / Anti-Foto) -->
+    <div id="pbi-watermark" class="pbi-watermark"></div>
+    <!-- Botão de Apresentação em Tela Cheia -->
+    <button id="btn-fullscreen-toggle" class="btn-fullscreen-toggle" title="Alternar Tela Cheia / Modo Apresentação">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+      </svg>
+      <span>Tela Cheia</span>
+    </button>
   </div>
 
   <!-- ==================== CAMADA EM TELA TODA: VÍDEO DE LOAD (4 SEGUNDOS) ==================== -->
@@ -127,6 +136,57 @@
     </div>
   </div>
 
+  <!-- ==================== MODAL DE RENOVAÇÃO DE SESSÃO (5 MINUTOS) ==================== -->
+  <div id="session-renew-modal" class="auth-backdrop hidden">
+    <div class="auth-card session-renew-card">
+      <div class="auth-badge warn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>EXPIRAÇÃO DE SESSÃO</span>
+      </div>
+
+      <div class="auth-header">
+        <h1>Sua Sessão Está Expirando</h1>
+        <p>Por medidas de segurança, a visualização requer confirmação periódica.</p>
+        <div class="session-countdown-box">
+          Desconexão em: <b id="renew-countdown-timer">45s</b>
+        </div>
+      </div>
+
+      <form id="renew-form" autocomplete="off" onsubmit="return false;">
+        <div class="input-group">
+          <label for="renew-password-input">Insira sua senha para permanecer conectado</label>
+          <div class="input-wrapper">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <input 
+              type="password" 
+              id="renew-password-input" 
+              placeholder="Digite sua senha..." 
+              required
+            >
+          </div>
+          <div id="renew-error" class="error-msg">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span id="renew-error-text">Senha incorreta.</span>
+          </div>
+          <div class="renew-actions">
+            <button type="submit" id="btn-renew-submit" class="btn-auth-submit">Permanecer Conectado</button>
+            <button type="button" id="btn-renew-logout" class="btn-renew-exit">Sair Agora</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- ==================== ALERTA DE SEGURANÇA (DEVTOOLS DETECTADO) ==================== -->
   <div id="security-alert-modal" class="security-alert-backdrop hidden">
     <div class="security-alert-card">
@@ -150,7 +210,7 @@
     </div>
   </div>
 
-  <script src="config.js?v=3.3.0"></script>
-  <script src="app.js?v=3.3.0"></script>
+  <script src="config.js?v=3.4.0"></script>
+  <script src="app.js?v=3.4.0"></script>
 </body>
 </html>

@@ -1289,3 +1289,56 @@ input:checked + .slider:before {
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
+
+
+/* ==========================================================================
+   BOTÕES EXTRAS: LINK RÁPIDO E BANIR IP
+   ========================================================================== */
+.btn-table-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--trans);
+}
+
+.btn-table-link:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+}
+
+.btn-ban-ip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 6px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--trans);
+}
+
+.btn-ban-ip:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.btn-ban-ip.is-banned {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #10b981;
+}
+
+.btn-ban-ip.is-banned:hover {
+  background: rgba(16, 185, 129, 0.25);
+}

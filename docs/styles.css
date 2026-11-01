@@ -487,3 +487,139 @@ button {
 .btn-security-reload:hover {
   background: #0369a1;
 }
+
+/* ==========================================================================
+   MARCA D'ÁGUA DINÂMICA (ANTI-PRINT / ANTI-FOTO)
+   ========================================================================== */
+.pbi-watermark {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-auto-rows: 180px;
+  gap: 20px;
+  padding: 40px;
+  user-select: none;
+  opacity: 0.13;
+}
+
+.watermark-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transform: rotate(-24deg);
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 2px rgba(0,0,0,0.8);
+  white-space: nowrap;
+}
+
+.watermark-item .wm-label {
+  font-size: 14px;
+  color: #38bdf8;
+  font-weight: 800;
+}
+
+.watermark-item .wm-ip {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.watermark-item .wm-time {
+  font-size: 10.5px;
+  color: #64748b;
+}
+
+/* ==========================================================================
+   BOTÃO DE TELA CHEIA (MODO APRESENTAÇÃO)
+   ========================================================================== */
+.btn-fullscreen-toggle {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 150;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: rgba(10, 24, 42, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #f8fafc;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--trans);
+  opacity: 0.6;
+}
+
+.btn-fullscreen-toggle:hover {
+  opacity: 1;
+  background: rgba(10, 24, 42, 0.98);
+  border-color: #38bdf8;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+/* ==========================================================================
+   MODAL DE RENOVAÇÃO DE SESSÃO (5 MINUTOS)
+   ========================================================================== */
+.session-renew-card {
+  border-color: rgba(245, 158, 11, 0.4) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(245, 158, 11, 0.15) !important;
+}
+
+.auth-badge.warn {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.session-countdown-box {
+  margin-top: 12px;
+  padding: 8px 14px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-sm);
+  color: #f59e0b;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.session-countdown-box b {
+  font-size: 15px;
+  color: #fbbf24;
+}
+
+.renew-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.btn-renew-exit {
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--trans);
+}
+
+.btn-renew-exit:hover {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
+}

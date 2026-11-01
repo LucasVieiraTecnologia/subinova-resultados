@@ -333,7 +333,13 @@
       match.total_usos = (match.total_usos || 0) + 1;
       match.ultimo_acesso = new Date().toISOString();
       localStorage.setItem(LOCAL_STORAGE_KEYS, JSON.stringify(keys));
-      return { ok: true, pbi_url: '' };
+      return { 
+        ok: true, 
+        pbi_url: '',
+        rotulo: match.rotulo || 'SUBINOVA',
+        ip: '127.0.0.1 (Local)',
+        sessao_ilimitada: Boolean(match.sessao_ilimitada)
+      };
     }
   };
 
@@ -411,7 +417,13 @@
 
     if (result && result.ok) {
       Security.reset();
-      return { ok: true, pbi_url: result.pbi_url };
+      return { 
+        ok: true, 
+        pbi_url: result.pbi_url,
+        rotulo: result.rotulo || 'SUBINOVA',
+        ip: result.ip || (cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0'),
+        sessao_ilimitada: Boolean(result.sessao_ilimitada)
+      };
     }
 
     const afterFail = Security.recordFailure();
@@ -428,7 +440,106 @@
     return { ok: false, error: baseErr };
   }
 
-  async function handleAuthSuccess(pbiUrl) {
+  /* ==========================================================================
+     MARCA D'ÁGUA DINÂMICA (ANTI-PRINT / ANTI-FOTO)
+     ========================================================================== */
+  function renderWatermark(rotulo, ip) {
+    const wmContainer = document.getElementById('pbi-watermark');
+    if (!wmContainer) return;
+    wmContainer.innerHTML = '';
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    for (let i = 0; i < 32; i++) {
+      const item = document.createElement('div');
+      item.className = 'watermark-item';
+      item.innerHTML = `
+        <span class="wm-label">${rotulo || 'SUBINOVA'}</span>
+        <span class="wm-ip">${ip || '0.0.0.0'}</span>
+        <span class="wm-time">${dateStr}</span>
+      `;
+      wmContainer.appendChild(item);
+    }
+  }
+
+  /* ==========================================================================
+     GERENCIAMENTO DE SESSÃO INTELIGENTE (5 MIN / VIP CHEFIA)
+     ========================================================================== */
+  let sessionTimerId = null;
+  let warningTimerId = null;
+  let countdownIntervalId = null;
+
+  function expireSession() {
+    if (pbiIframe) {
+      pbiIframe.src = 'about:blank';
+    }
+    window.location.reload();
+  }
+
+  function setupSessionTimer(sessaoIlimitada) {
+    if (sessionTimerId) clearTimeout(sessionTimerId);
+    if (warningTimerId) clearTimeout(warningTimerId);
+    if (countdownIntervalId) clearInterval(countdownIntervalId);
+
+    if (sessaoIlimitada) {
+      console.log('Sessão Contínua (Chefia/VIP) ativa. Sem expiração periódica.');
+      return;
+    }
+
+    // Sessão de 5 minutos (300 segundos). Alerta abre com 45 segundos restantes (255s).
+    const TOTAL_SESSION_MS = 5 * 60 * 1000;
+    const WARNING_TIME_MS = 4 * 60 * 1000 + 15 * 1000;
+
+    warningTimerId = setTimeout(() => {
+      openSessionRenewModal();
+    }, WARNING_TIME_MS);
+
+    sessionTimerId = setTimeout(() => {
+      expireSession();
+    }, TOTAL_SESSION_MS);
+  }
+
+  function openSessionRenewModal() {
+    const renewModal = document.getElementById('session-renew-modal');
+    const renewInput = document.getElementById('renew-password-input');
+    const renewTimerEl = document.getElementById('renew-countdown-timer');
+    const renewErr = document.getElementById('renew-error');
+
+    if (!renewModal) return;
+    renewModal.classList.remove('hidden');
+    if (renewInput) {
+      renewInput.value = '';
+      renewInput.focus();
+    }
+    if (renewErr) renewErr.classList.remove('visible');
+
+    let secondsRemaining = 45;
+    if (renewTimerEl) renewTimerEl.textContent = `${secondsRemaining}s`;
+
+    countdownIntervalId = setInterval(() => {
+      secondsRemaining--;
+      if (renewTimerEl) {
+        renewTimerEl.textContent = `${secondsRemaining}s`;
+      }
+      if (secondsRemaining <= 0) {
+        clearInterval(countdownIntervalId);
+        expireSession();
+      }
+    }, 1000);
+  }
+
+  function closeSessionRenewModal() {
+    const renewModal = document.getElementById('session-renew-modal');
+    if (renewModal) renewModal.classList.add('hidden');
+    if (countdownIntervalId) clearInterval(countdownIntervalId);
+  }
+
+  async function handleAuthSuccess(authData) {
+    const pbiUrl = typeof authData === 'string' ? authData : authData?.pbi_url;
+    const rotulo = authData?.rotulo || 'SUBINOVA';
+    const ip = authData?.ip || '0.0.0.0';
+    const sessaoIlimitada = Boolean(authData?.sessao_ilimitada);
+
     if (btnSkipVideo) {
       btnSkipVideo.classList.add('hidden');
     }
@@ -436,6 +547,9 @@
     if (pbiIframe && pbiUrl) {
       pbiIframe.src = pbiUrl;
     }
+
+    // Aplica a marca d'água
+    renderWatermark(rotulo, ip);
 
     authModal.style.transition = 'opacity 0.4s ease';
     authModal.style.opacity = '0';
@@ -451,14 +565,8 @@
       pbiLayer.classList.add('active');
     }, 400);
 
-    // Sessão com expiração automática a cada 5 minutos (F5 forçado para exigir novo login)
-    const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
-    setTimeout(() => {
-      if (pbiIframe) {
-        pbiIframe.src = 'about:blank';
-      }
-      window.location.reload();
-    }, SESSION_TIMEOUT_MS);
+    // Inicia temporizador inteligente de sessão
+    setupSessionTimer(sessaoIlimitada);
   }
 
   function handleAuthError(msg) {
@@ -484,7 +592,7 @@
     try {
       const res = await validateAccessKey(val);
       if (res.ok) {
-        handleAuthSuccess(res.pbi_url);
+        handleAuthSuccess(res);
       } else if (res.error) {
         handleAuthError(res.error);
       }
@@ -639,10 +747,115 @@
   });
 
   /* ==========================================================================
-     STARTUP
+     RENOVAÇÃO DE SESSÃO & MODO APRESENTAÇÃO / TELA CHEIA
+     ========================================================================== */
+  const renewForm = document.getElementById('renew-form');
+  const renewPasswordInput = document.getElementById('renew-password-input');
+  const renewError = document.getElementById('renew-error');
+  const renewErrorText = document.getElementById('renew-error-text');
+  const btnRenewSubmit = document.getElementById('btn-renew-submit');
+  const btnRenewLogout = document.getElementById('btn-renew-logout');
+
+  if (renewForm) {
+    renewForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const val = renewPasswordInput.value.trim();
+      if (!val) return;
+      if (btnRenewSubmit) {
+        btnRenewSubmit.disabled = true;
+        btnRenewSubmit.textContent = 'Verificando...';
+      }
+      try {
+        const res = await validateAccessKey(val);
+        if (res.ok) {
+          closeSessionRenewModal();
+          setupSessionTimer(res.sessao_ilimitada);
+        } else {
+          if (renewError && renewErrorText) {
+            renewErrorText.textContent = res.error || 'Senha incorreta.';
+            renewError.classList.add('visible');
+          }
+          renewPasswordInput.focus();
+          renewPasswordInput.select();
+        }
+      } finally {
+        if (btnRenewSubmit) {
+          btnRenewSubmit.disabled = false;
+          btnRenewSubmit.textContent = 'Permanecer Conectado';
+        }
+      }
+    });
+  }
+
+  if (renewPasswordInput) {
+    renewPasswordInput.addEventListener('input', () => {
+      if (renewError) renewError.classList.remove('visible');
+    });
+  }
+
+  if (btnRenewLogout) {
+    btnRenewLogout.addEventListener('click', () => {
+      expireSession();
+    });
+  }
+
+  const btnFullscreenToggle = document.getElementById('btn-fullscreen-toggle');
+  if (btnFullscreenToggle) {
+    btnFullscreenToggle.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+        const span = btnFullscreenToggle.querySelector('span');
+        if (span) span.textContent = 'Sair da Tela Cheia';
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+          const span = btnFullscreenToggle.querySelector('span');
+          if (span) span.textContent = 'Tela Cheia';
+        }
+      }
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      const span = btnFullscreenToggle.querySelector('span');
+      if (!document.fullscreenElement && span) {
+        span.textContent = 'Tela Cheia';
+      }
+    });
+  }
+
+  /* ==========================================================================
+     STARTUP & LINK DE 1 CLIQUE
      ========================================================================== */
   window.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
+    const directKey = urlParams.get('k');
+
+    // Link de 1-clique gerado pelo ADM (?k=...)
+    if (directKey) {
+      try {
+        // Remove a chave imediatamente da barra de endereço para não ficar no histórico
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch (e) {}
+
+      if (bgVideo) {
+        try { bgVideo.pause(); } catch (e) {}
+        bgVideo.style.display = 'none';
+      }
+      if (btnSkipVideo) btnSkipVideo.classList.add('hidden');
+
+      (async () => {
+        const res = await validateAccessKey(directKey);
+        if (res.ok) {
+          handleAuthSuccess(res);
+        } else {
+          showAuthModal();
+          handleAuthError(res.error || 'Chave de acesso do link inválida ou expirada.');
+        }
+      })();
+      return;
+    }
+
     if (urlParams.get('preview') === 'modal') {
       showAuthModal();
       return;
