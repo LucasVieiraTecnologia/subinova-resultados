@@ -261,7 +261,13 @@
               modo_manutencao: Boolean(data.modo_manutencao),
               mensagem_manutencao: data.mensagem_manutencao || '',
               banner_ativo: Boolean(data.banner_ativo),
-              banner_mensagem: data.banner_mensagem || ''
+              banner_mensagem: data.banner_mensagem || '',
+              whatsapp_ativo: Boolean(data.whatsapp_ativo),
+              whatsapp_phone: data.whatsapp_phone || '',
+              whatsapp_apikey: data.whatsapp_apikey || '',
+              whatsapp_notificar_sucesso: data.whatsapp_notificar_sucesso !== false,
+              whatsapp_notificar_falha: Boolean(data.whatsapp_notificar_falha),
+              whatsapp_notificar_devtools: Boolean(data.whatsapp_notificar_devtools)
             };
           }
         } catch (e) {}
@@ -270,7 +276,13 @@
         modo_manutencao: localStorage.getItem('subinova_modo_manutencao') === 'true',
         mensagem_manutencao: 'Painel em manutenção temporária.',
         banner_ativo: localStorage.getItem('subinova_banner_ativo') === 'true',
-        banner_mensagem: localStorage.getItem('subinova_banner_msg') || ''
+        banner_mensagem: localStorage.getItem('subinova_banner_msg') || '',
+        whatsapp_ativo: localStorage.getItem('subinova_wpp_ativo') === 'true',
+        whatsapp_phone: localStorage.getItem('subinova_wpp_phone') || '',
+        whatsapp_apikey: localStorage.getItem('subinova_wpp_apikey') || '',
+        whatsapp_notificar_sucesso: localStorage.getItem('subinova_wpp_suc') !== 'false',
+        whatsapp_notificar_falha: localStorage.getItem('subinova_wpp_falha') === 'true',
+        whatsapp_notificar_devtools: localStorage.getItem('subinova_wpp_dev') === 'true'
       };
     },
 
@@ -403,10 +415,34 @@
   }
 
   /* ==========================================================================
+     INTEGRAÇÃO COM WHATSAPP (CALLMEBOT API)
+     ========================================================================== */
+  let cachedPortalStatus = null;
+  let lastAttemptedKey = '';
+
+  async function sendWhatsAppAlert(text) {
+    if (!cachedPortalStatus) {
+      try {
+        cachedPortalStatus = await KeyStore.fetchPortalStatus();
+      } catch (e) {}
+    }
+    if (!cachedPortalStatus || !cachedPortalStatus.whatsapp_ativo) return;
+    const phone = cachedPortalStatus.whatsapp_phone;
+    const apikey = cachedPortalStatus.whatsapp_apikey;
+    if (!phone || !apikey) return;
+
+    try {
+      const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(text)}&apikey=${encodeURIComponent(apikey)}`;
+      fetch(url, { mode: 'no-cors' }).catch(() => {});
+    } catch (e) {}
+  }
+
+  /* ==========================================================================
      VALIDAÇÃO DA SENHA & LIBERAÇÃO DO POWER BI
      ========================================================================== */
   async function validateAccessKey(password) {
     if (!password) return { ok: false, error: 'Digite uma senha.' };
+    lastAttemptedKey = password.trim();
 
     const sec = Security.getState();
     if (sec.isLocked) {
@@ -430,10 +466,35 @@
     if (afterFail.isLocked || (result && result.locked)) {
       const lockUntil = afterFail.lockedUntil || (Date.now() + Security.LOCK_DURATION_MS);
       startLockoutCountdown(lockUntil);
+      if (cachedPortalStatus && cachedPortalStatus.whatsapp_notificar_falha) {
+        const ipDisp = cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0';
+        const dev = getClientDeviceInfo();
+        sendWhatsAppAlert(
+          `⚠️ *SUBINOVA · TENTATIVA BLOQUEADA*\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `🔑 *Chave Tentada:* ${password}\n` +
+          `🚫 *Motivo:* Limite de 5 tentativas atingido (Bloqueio 3min)\n` +
+          `🌐 *IP:* ${ipDisp}\n` +
+          `💻 *Dispositivo:* ${dev.os} · ${dev.browser}`
+        );
+      }
       return { ok: false, error: (result && result.error) || 'Limite de 5 tentativas atingido. Bloqueado por 3 minutos.' };
     }
 
     const baseErr = (result && result.error) ? result.error : 'Senha incorreta.';
+    if (cachedPortalStatus && cachedPortalStatus.whatsapp_notificar_falha) {
+      const ipDisp = cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0';
+      const dev = getClientDeviceInfo();
+      sendWhatsAppAlert(
+        `⚠️ *SUBINOVA · TENTATIVA NEGADA*\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🔑 *Chave Tentada:* ${password}\n` +
+        `🚫 *Motivo:* ${baseErr}\n` +
+        `🌐 *IP:* ${ipDisp}\n` +
+        `💻 *Dispositivo:* ${dev.os} · ${dev.browser}`
+      );
+    }
+
     if (baseErr === 'Senha incorreta.') {
       return { ok: false, error: `Senha incorreta. (${afterFail.attempts}/${Security.MAX_ATTEMPTS} tentativas)` };
     }
@@ -565,6 +626,42 @@
       pbiLayer.classList.add('active');
     }, 400);
 
+    // Notificação em tempo real no WhatsApp
+    const dispatchSuccessWpp = () => {
+      if (cachedPortalStatus && cachedPortalStatus.whatsapp_notificar_sucesso) {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const ipDisp = ip || (cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0');
+        const locDisp = cachedIpInfo && cachedIpInfo.cidade && cachedIpInfo.cidade !== 'N/A' 
+          ? `${cachedIpInfo.cidade}, ${cachedIpInfo.regiao || 'BR'}`
+          : 'Brasil';
+        const dev = getClientDeviceInfo();
+
+        const msg = `🚨 *SUBINOVA · NOVO ACESSO*\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `👤 *Destinatário:* ${rotulo || 'SUBINOVA'}\n` +
+          `🔑 *Chave:* ${lastAttemptedKey || 'Link de 1-Clique'}\n` +
+          `📍 *Local:* ${locDisp}\n` +
+          `🌐 *IP:* ${ipDisp}\n` +
+          `💻 *Dispositivo:* ${dev.os} · ${dev.browser}\n` +
+          `⏱️ *Sessão:* ${sessaoIlimitada ? '👑 Ilimitada (Chefia)' : '5 minutos'}\n` +
+          `📅 *Horário:* ${dateStr}\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `Status: ✅ Liberado com Sucesso`;
+
+        sendWhatsAppAlert(msg);
+      }
+    };
+
+    if (!cachedPortalStatus) {
+      KeyStore.fetchPortalStatus().then(st => {
+        cachedPortalStatus = st;
+        dispatchSuccessWpp();
+      }).catch(() => {});
+    } else {
+      dispatchSuccessWpp();
+    }
+
     // Inicia temporizador inteligente de sessão
     setupSessionTimer(sessaoIlimitada);
   }
@@ -640,6 +737,30 @@
     // Exibe o modal de segurança
     if (securityAlertModal) {
       securityAlertModal.classList.remove('hidden');
+    }
+
+    // Alerta de segurança no WhatsApp
+    const dispatchDevToolsWpp = () => {
+      if (cachedPortalStatus && cachedPortalStatus.whatsapp_notificar_devtools) {
+        const ipDisp = cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0';
+        const dev = getClientDeviceInfo();
+        const msg = `🚨 *SUBINOVA · ALERTA DE SEGURANÇA*\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `⚠️ *Tentativa de Inspeção de Código (F12 / DevTools)!*\n` +
+          `🌐 *IP:* ${ipDisp}\n` +
+          `💻 *Dispositivo:* ${dev.os} · ${dev.browser}\n` +
+          `🔒 O painel Power BI foi descarregado instantaneamente.`;
+        sendWhatsAppAlert(msg);
+      }
+    };
+
+    if (!cachedPortalStatus) {
+      KeyStore.fetchPortalStatus().then(st => {
+        cachedPortalStatus = st;
+        dispatchDevToolsWpp();
+      }).catch(() => {});
+    } else {
+      dispatchDevToolsWpp();
     }
   }
 

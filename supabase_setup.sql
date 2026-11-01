@@ -35,7 +35,13 @@ VALUES
     ('mensagem_manutencao', 'Painel temporariamente indisponível para atualização.'),
     ('banner_ativo', 'false'),
     ('banner_mensagem', 'Bem-vindo ao Portal de Resultados SUBINOVA.'),
-    ('pbi_url', 'https://app.powerbi.com/view?r=eyJrIjoiNTgwNTFlOTctODk2OC00ZjFmLWIwZDUtMjg4ZmFhMDgyOGNkIiwidCI6ImU1ZDNhZTdjLTliMzgtNDhkZS1hMDg3LWY2NzM0YTI4NzU3NCJ9')
+    ('pbi_url', 'https://app.powerbi.com/view?r=eyJrIjoiNTgwNTFlOTctODk2OC00ZjFmLWIwZDUtMjg4ZmFhMDgyOGNkIiwidCI6ImU1ZDNhZTdjLTliMzgtNDhkZS1hMDg3LWY2NzM0YTI4NzU3NCJ9'),
+    ('whatsapp_ativo', 'false'),
+    ('whatsapp_phone', ''),
+    ('whatsapp_apikey', ''),
+    ('whatsapp_notificar_sucesso', 'true'),
+    ('whatsapp_notificar_falha', 'true'),
+    ('whatsapp_notificar_devtools', 'true')
 ON CONFLICT (chave) DO NOTHING;
 
 -- 3. Tabela de Logs de Acesso e Auditoria (IP, Geolocalização, Dispositivo)
@@ -112,20 +118,42 @@ DECLARE
     v_manut_msg text := 'Painel temporariamente indisponível para atualização.';
     v_banner boolean := false;
     v_banner_msg text := '';
+    v_wpp_ativo boolean := false;
+    v_wpp_phone text := '';
+    v_wpp_key text := '';
+    v_wpp_suc boolean := true;
+    v_wpp_falha boolean := true;
+    v_wpp_dev boolean := true;
     rec record;
 BEGIN
-    FOR rec IN SELECT chave, valor FROM public.configuracoes WHERE chave IN ('modo_manutencao', 'mensagem_manutencao', 'banner_ativo', 'banner_mensagem') LOOP
+    FOR rec IN SELECT chave, valor FROM public.configuracoes WHERE chave IN (
+        'modo_manutencao', 'mensagem_manutencao', 'banner_ativo', 'banner_mensagem',
+        'whatsapp_ativo', 'whatsapp_phone', 'whatsapp_apikey',
+        'whatsapp_notificar_sucesso', 'whatsapp_notificar_falha', 'whatsapp_notificar_devtools'
+    ) LOOP
         IF rec.chave = 'modo_manutencao' THEN v_manut := (rec.valor = 'true'); END IF;
         IF rec.chave = 'mensagem_manutencao' THEN v_manut_msg := COALESCE(rec.valor, v_manut_msg); END IF;
         IF rec.chave = 'banner_ativo' THEN v_banner := (rec.valor = 'true'); END IF;
         IF rec.chave = 'banner_mensagem' THEN v_banner_msg := COALESCE(rec.valor, ''); END IF;
+        IF rec.chave = 'whatsapp_ativo' THEN v_wpp_ativo := (rec.valor = 'true'); END IF;
+        IF rec.chave = 'whatsapp_phone' THEN v_wpp_phone := COALESCE(rec.valor, ''); END IF;
+        IF rec.chave = 'whatsapp_apikey' THEN v_wpp_key := COALESCE(rec.valor, ''); END IF;
+        IF rec.chave = 'whatsapp_notificar_sucesso' THEN v_wpp_suc := (rec.valor = 'true'); END IF;
+        IF rec.chave = 'whatsapp_notificar_falha' THEN v_wpp_falha := (rec.valor = 'true'); END IF;
+        IF rec.chave = 'whatsapp_notificar_devtools' THEN v_wpp_dev := (rec.valor = 'true'); END IF;
     END LOOP;
 
     RETURN jsonb_build_object(
         'modo_manutencao', v_manut,
         'mensagem_manutencao', v_manut_msg,
         'banner_ativo', v_banner,
-        'banner_mensagem', v_banner_msg
+        'banner_mensagem', v_banner_msg,
+        'whatsapp_ativo', v_wpp_ativo,
+        'whatsapp_phone', v_wpp_phone,
+        'whatsapp_apikey', v_wpp_key,
+        'whatsapp_notificar_sucesso', v_wpp_suc,
+        'whatsapp_notificar_falha', v_wpp_falha,
+        'whatsapp_notificar_devtools', v_wpp_dev
     );
 END;
 $$;
@@ -264,6 +292,12 @@ DECLARE
     v_manut boolean := false;
     v_banner boolean := false;
     v_banner_msg text := '';
+    v_wpp_ativo boolean := false;
+    v_wpp_phone text := '';
+    v_wpp_key text := '';
+    v_wpp_suc boolean := true;
+    v_wpp_falha boolean := true;
+    v_wpp_dev boolean := true;
     rec record;
 BEGIN
     IF NOT public.verificar_admin(p_admin_hash) THEN
@@ -284,10 +318,20 @@ BEGIN
         ORDER BY criado_em DESC
     ) b;
 
-    FOR rec IN SELECT chave, valor FROM public.configuracoes WHERE chave IN ('modo_manutencao', 'banner_ativo', 'banner_mensagem') LOOP
+    FOR rec IN SELECT chave, valor FROM public.configuracoes WHERE chave IN (
+        'modo_manutencao', 'banner_ativo', 'banner_mensagem',
+        'whatsapp_ativo', 'whatsapp_phone', 'whatsapp_apikey',
+        'whatsapp_notificar_sucesso', 'whatsapp_notificar_falha', 'whatsapp_notificar_devtools'
+    ) LOOP
         IF rec.chave = 'modo_manutencao' THEN v_manut := (rec.valor = 'true'); END IF;
         IF rec.chave = 'banner_ativo' THEN v_banner := (rec.valor = 'true'); END IF;
         IF rec.chave = 'banner_mensagem' THEN v_banner_msg := COALESCE(rec.valor, ''); END IF;
+        IF rec.chave = 'whatsapp_ativo' THEN v_wpp_ativo := (rec.valor = 'true'); END IF;
+        IF rec.chave = 'whatsapp_phone' THEN v_wpp_phone := COALESCE(rec.valor, ''); END IF;
+        IF rec.chave = 'whatsapp_apikey' THEN v_wpp_key := COALESCE(rec.valor, ''); END IF;
+        IF rec.chave = 'whatsapp_notificar_sucesso' THEN v_wpp_suc := (rec.valor = 'true'); END IF;
+        IF rec.chave = 'whatsapp_notificar_falha' THEN v_wpp_falha := (rec.valor = 'true'); END IF;
+        IF rec.chave = 'whatsapp_notificar_devtools' THEN v_wpp_dev := (rec.valor = 'true'); END IF;
     END LOOP;
 
     RETURN jsonb_build_object(
@@ -296,7 +340,13 @@ BEGIN
         'ips_bloqueados', v_ips_bloqueados,
         'modo_manutencao', v_manut,
         'banner_ativo', v_banner,
-        'banner_mensagem', v_banner_msg
+        'banner_mensagem', v_banner_msg,
+        'whatsapp_ativo', v_wpp_ativo,
+        'whatsapp_phone', v_wpp_phone,
+        'whatsapp_apikey', v_wpp_key,
+        'whatsapp_notificar_sucesso', v_wpp_suc,
+        'whatsapp_notificar_falha', v_wpp_falha,
+        'whatsapp_notificar_devtools', v_wpp_dev
     );
 END;
 $$;
@@ -455,7 +505,13 @@ CREATE OR REPLACE FUNCTION public.admin_salvar_configuracoes(
     p_modo_manutencao boolean DEFAULT NULL,
     p_banner_ativo boolean DEFAULT NULL,
     p_banner_mensagem text DEFAULT NULL,
-    p_novo_admin_hash text DEFAULT NULL
+    p_novo_admin_hash text DEFAULT NULL,
+    p_whatsapp_ativo boolean DEFAULT NULL,
+    p_whatsapp_phone text DEFAULT NULL,
+    p_whatsapp_apikey text DEFAULT NULL,
+    p_whatsapp_notificar_sucesso boolean DEFAULT NULL,
+    p_whatsapp_notificar_falha boolean DEFAULT NULL,
+    p_whatsapp_notificar_devtools boolean DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -488,6 +544,42 @@ BEGIN
     IF p_novo_admin_hash IS NOT NULL AND length(trim(p_novo_admin_hash)) > 0 THEN
         INSERT INTO public.configuracoes (chave, valor)
         VALUES ('admin_hash', trim(p_novo_admin_hash))
+        ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor;
+    END IF;
+
+    IF p_whatsapp_ativo IS NOT NULL THEN
+        INSERT INTO public.configuracoes (chave, valor)
+        VALUES ('whatsapp_ativo', CASE WHEN p_whatsapp_ativo THEN 'true' ELSE 'false' END)
+        ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor;
+    END IF;
+
+    IF p_whatsapp_phone IS NOT NULL THEN
+        INSERT INTO public.configuracoes (chave, valor)
+        VALUES ('whatsapp_phone', trim(p_whatsapp_phone))
+        ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor;
+    END IF;
+
+    IF p_whatsapp_apikey IS NOT NULL THEN
+        INSERT INTO public.configuracoes (chave, valor)
+        VALUES ('whatsapp_apikey', trim(p_whatsapp_apikey))
+        ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor;
+    END IF;
+
+    IF p_whatsapp_notificar_sucesso IS NOT NULL THEN
+        INSERT INTO public.configuracoes (chave, valor)
+        VALUES ('whatsapp_notificar_sucesso', CASE WHEN p_whatsapp_notificar_sucesso THEN 'true' ELSE 'false' END)
+        ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor;
+    END IF;
+
+    IF p_whatsapp_notificar_falha IS NOT NULL THEN
+        INSERT INTO public.configuracoes (chave, valor)
+        VALUES ('whatsapp_notificar_falha', CASE WHEN p_whatsapp_notificar_falha THEN 'true' ELSE 'false' END)
+        ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor;
+    END IF;
+
+    IF p_whatsapp_notificar_devtools IS NOT NULL THEN
+        INSERT INTO public.configuracoes (chave, valor)
+        VALUES ('whatsapp_notificar_devtools', CASE WHEN p_whatsapp_notificar_devtools THEN 'true' ELSE 'false' END)
         ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor;
     END IF;
 

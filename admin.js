@@ -356,6 +356,30 @@
           throw new Error((res && res.error) || 'Erro ao salvar comunicado.');
         }
       }
+    },
+
+    async saveWhatsappConfig(cfg) {
+      localStorage.setItem('subinova_wpp_ativo', String(cfg.ativo));
+      localStorage.setItem('subinova_wpp_phone', cfg.phone || '');
+      localStorage.setItem('subinova_wpp_apikey', cfg.apikey || '');
+      localStorage.setItem('subinova_wpp_suc', String(cfg.notificar_sucesso));
+      localStorage.setItem('subinova_wpp_falha', String(cfg.notificar_falha));
+      localStorage.setItem('subinova_wpp_dev', String(cfg.notificar_devtools));
+
+      if (this.isCloudEnabled()) {
+        const res = await this.callRpc('admin_salvar_configuracoes', {
+          p_admin_hash: this.getAdminToken(),
+          p_whatsapp_ativo: Boolean(cfg.ativo),
+          p_whatsapp_phone: cfg.phone || '',
+          p_whatsapp_apikey: cfg.apikey || '',
+          p_whatsapp_notificar_sucesso: Boolean(cfg.notificar_sucesso),
+          p_whatsapp_notificar_falha: Boolean(cfg.notificar_falha),
+          p_whatsapp_notificar_devtools: Boolean(cfg.notificar_devtools)
+        });
+        if (!res || !res.ok) {
+          throw new Error((res && res.error) || 'Erro ao salvar configurações do WhatsApp.');
+        }
+      }
     }
   };
 
@@ -416,6 +440,17 @@
   const bannerPreviewText = document.getElementById('banner-preview-text');
   const formBanner = document.getElementById('form-banner');
 
+  // Aba 5: WhatsApp
+  const chkWhatsappActive = document.getElementById('chk-whatsapp-active');
+  const wppPhoneInput = document.getElementById('wpp-phone-input');
+  const wppApikeyInput = document.getElementById('wpp-apikey-input');
+  const wppNotifySuccess = document.getElementById('wpp-notify-success');
+  const wppNotifyFailed = document.getElementById('wpp-notify-failed');
+  const wppNotifyDevtools = document.getElementById('wpp-notify-devtools');
+  const formWhatsapp = document.getElementById('form-whatsapp');
+  const btnTestWhatsapp = document.getElementById('btn-test-whatsapp');
+  const wppTestFeedback = document.getElementById('wpp-test-feedback');
+
   // Modais
   const modalKey = document.getElementById('modal-key');
   const formKey = document.getElementById('form-key');
@@ -461,6 +496,8 @@
         renderAnalyticsView();
       } else if (targetTab === 'tab-banner') {
         renderBannerView();
+      } else if (targetTab === 'tab-whatsapp') {
+        renderWhatsappView();
       } else {
         renderDashboard();
       }
@@ -1074,6 +1111,99 @@
       saveBtn.disabled = false;
     }
   });
+
+  /* ==========================================================================
+     ABA 5: ALERTAS NO WHATSAPP
+     ========================================================================== */
+  async function renderWhatsappView() {
+    const bundle = await Storage.fetchAdminBundle();
+    if (chkWhatsappActive) chkWhatsappActive.checked = Boolean(bundle.whatsapp_ativo);
+    if (wppPhoneInput) wppPhoneInput.value = bundle.whatsapp_phone || '';
+    if (wppApikeyInput) wppApikeyInput.value = bundle.whatsapp_apikey || '';
+    if (wppNotifySuccess) wppNotifySuccess.checked = bundle.whatsapp_notificar_sucesso !== false;
+    if (wppNotifyFailed) wppNotifyFailed.checked = bundle.whatsapp_notificar_falha !== false;
+    if (wppNotifyDevtools) wppNotifyDevtools.checked = bundle.whatsapp_notificar_devtools !== false;
+    if (wppTestFeedback) wppTestFeedback.textContent = '';
+  }
+
+  if (formWhatsapp) {
+    formWhatsapp.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const saveBtn = document.getElementById('btn-save-whatsapp');
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Salvando...';
+      }
+
+      const cfg = {
+        ativo: chkWhatsappActive ? chkWhatsappActive.checked : false,
+        phone: wppPhoneInput ? wppPhoneInput.value.trim() : '',
+        apikey: wppApikeyInput ? wppApikeyInput.value.trim() : '',
+        notificar_sucesso: wppNotifySuccess ? wppNotifySuccess.checked : true,
+        notificar_falha: wppNotifyFailed ? wppNotifyFailed.checked : true,
+        notificar_devtools: wppNotifyDevtools ? wppNotifyDevtools.checked : true
+      };
+
+      try {
+        await Storage.saveWhatsappConfig(cfg);
+        if (saveBtn) {
+          saveBtn.innerHTML = `<span>✅ Configurações Salvas!</span>`;
+          setTimeout(() => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = `
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+              </svg>
+              <span>Salvar Configurações</span>
+            `;
+          }, 1800);
+        }
+      } catch (err) {
+        alert('Erro ao salvar WhatsApp: ' + err.message);
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    });
+  }
+
+  if (btnTestWhatsapp) {
+    btnTestWhatsapp.addEventListener('click', async () => {
+      const phone = wppPhoneInput ? wppPhoneInput.value.trim() : '';
+      const apikey = wppApikeyInput ? wppApikeyInput.value.trim() : '';
+
+      if (!phone || !apikey) {
+        alert('Por favor, informe seu número de telefone e a chave API antes de testar.');
+        return;
+      }
+
+      if (wppTestFeedback) {
+        wppTestFeedback.style.color = '#38bdf8';
+        wppTestFeedback.textContent = 'Enviando teste no WhatsApp...';
+      }
+
+      const testMsg = `🚨 *SUBINOVA · TESTE DE NOTIFICAÇÃO*\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `✅ Parabéns! As notificações no seu WhatsApp foram conectadas com sucesso.\n` +
+        `Sempre que alguém acessar o painel de resultados, você receberá o alerta com IP, local e dispositivo aqui!\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⏰ Testado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`;
+
+      try {
+        const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(testMsg)}&apikey=${encodeURIComponent(apikey)}`;
+        await fetch(url, { mode: 'no-cors' });
+        if (wppTestFeedback) {
+          wppTestFeedback.style.color = '#10b981';
+          wppTestFeedback.textContent = '✅ Mensagem de teste enviada! Verifique seu WhatsApp.';
+        }
+      } catch (e) {
+        if (wppTestFeedback) {
+          wppTestFeedback.style.color = '#ef4444';
+          wppTestFeedback.textContent = 'Erro ao enviar: ' + e.message;
+        }
+      }
+    });
+  }
 
   /* ==========================================================================
      GERENCIAMENTO DE MODAIS
