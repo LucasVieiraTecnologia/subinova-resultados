@@ -415,26 +415,40 @@
   }
 
   /* ==========================================================================
-     INTEGRAÇÃO COM WHATSAPP (CALLMEBOT API)
+     ALERTAS INSTANTÂNEOS NO CELULAR (NTFY PUSH & WHATSAPP)
      ========================================================================== */
   let cachedPortalStatus = null;
   let lastAttemptedKey = '';
 
-  async function sendWhatsAppAlert(text) {
+  async function sendAlertNotification(title, message, tags, priority) {
     if (!cachedPortalStatus) {
       try {
         cachedPortalStatus = await KeyStore.fetchPortalStatus();
       } catch (e) {}
     }
-    if (!cachedPortalStatus || !cachedPortalStatus.whatsapp_ativo) return;
-    const phone = cachedPortalStatus.whatsapp_phone;
-    const apikey = cachedPortalStatus.whatsapp_apikey;
-    if (!phone || !apikey) return;
 
+    // 1. Envio Direto via NTFY Push (Celular / Desktop em 0.1s)
+    const topic = (cachedPortalStatus && cachedPortalStatus.ntfy_topic) || 'subinova-lucas-7184';
     try {
-      const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(text)}&apikey=${encodeURIComponent(apikey)}`;
-      fetch(url, { mode: 'no-cors' }).catch(() => {});
+      fetch(`https://ntfy.sh/${topic}`, {
+        method: 'POST',
+        headers: {
+          'Title': title || 'SUBINOVA',
+          'Priority': priority || 'high',
+          'Tags': tags || 'bell'
+        },
+        body: message
+      }).catch(() => {});
     } catch (e) {}
+
+    // 2. Envio Secundário via WhatsApp CallMeBot (se configurado)
+    if (cachedPortalStatus && cachedPortalStatus.whatsapp_ativo && cachedPortalStatus.whatsapp_phone && cachedPortalStatus.whatsapp_apikey) {
+      try {
+        const fullWppMsg = `🚨 *${title}*\n━━━━━━━━━━━━━━━━━━━━\n${message}`;
+        const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(cachedPortalStatus.whatsapp_phone)}&text=${encodeURIComponent(fullWppMsg)}&apikey=${encodeURIComponent(cachedPortalStatus.whatsapp_apikey)}`;
+        fetch(url, { mode: 'no-cors' }).catch(() => {});
+      } catch (e) {}
+    }
   }
 
   /* ==========================================================================
@@ -466,34 +480,26 @@
     if (afterFail.isLocked || (result && result.locked)) {
       const lockUntil = afterFail.lockedUntil || (Date.now() + Security.LOCK_DURATION_MS);
       startLockoutCountdown(lockUntil);
-      if (cachedPortalStatus && cachedPortalStatus.whatsapp_notificar_falha) {
-        const ipDisp = cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0';
-        const dev = getClientDeviceInfo();
-        sendWhatsAppAlert(
-          `⚠️ *SUBINOVA · TENTATIVA BLOQUEADA*\n` +
-          `━━━━━━━━━━━━━━━━━━━━\n` +
-          `🔑 *Chave Tentada:* ${password}\n` +
-          `🚫 *Motivo:* Limite de 5 tentativas atingido (Bloqueio 3min)\n` +
-          `🌐 *IP:* ${ipDisp}\n` +
-          `💻 *Dispositivo:* ${dev.os} · ${dev.browser}`
-        );
-      }
+      const ipDisp = cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0';
+      const dev = getClientDeviceInfo();
+      sendAlertNotification(
+        `⚠️ Tentativa Bloqueada (3min)`,
+        `Chave: ${password}\nMotivo: Limite de 5 tentativas atingido\nIP: ${ipDisp}\nDispositivo: ${dev.os} · ${dev.browser}`,
+        'warning,x',
+        'high'
+      );
       return { ok: false, error: (result && result.error) || 'Limite de 5 tentativas atingido. Bloqueado por 3 minutos.' };
     }
 
     const baseErr = (result && result.error) ? result.error : 'Senha incorreta.';
-    if (cachedPortalStatus && cachedPortalStatus.whatsapp_notificar_falha) {
-      const ipDisp = cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0';
-      const dev = getClientDeviceInfo();
-      sendWhatsAppAlert(
-        `⚠️ *SUBINOVA · TENTATIVA NEGADA*\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `🔑 *Chave Tentada:* ${password}\n` +
-        `🚫 *Motivo:* ${baseErr}\n` +
-        `🌐 *IP:* ${ipDisp}\n` +
-        `💻 *Dispositivo:* ${dev.os} · ${dev.browser}`
-      );
-    }
+    const ipDisp = cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0';
+    const dev = getClientDeviceInfo();
+    sendAlertNotification(
+      `⚠️ Acesso Negado no Portal`,
+      `Chave: ${password}\nMotivo: ${baseErr}\nIP: ${ipDisp}\nDispositivo: ${dev.os} · ${dev.browser}`,
+      'warning,x',
+      'default'
+    );
 
     if (baseErr === 'Senha incorreta.') {
       return { ok: false, error: `Senha incorreta. (${afterFail.attempts}/${Security.MAX_ATTEMPTS} tentativas)` };
@@ -626,41 +632,21 @@
       pbiLayer.classList.add('active');
     }, 400);
 
-    // Notificação em tempo real no WhatsApp
-    const dispatchSuccessWpp = () => {
-      if (cachedPortalStatus && cachedPortalStatus.whatsapp_notificar_sucesso) {
-        const now = new Date();
-        const dateStr = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        const ipDisp = ip || (cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0');
-        const locDisp = cachedIpInfo && cachedIpInfo.cidade && cachedIpInfo.cidade !== 'N/A' 
-          ? `${cachedIpInfo.cidade}, ${cachedIpInfo.regiao || 'BR'}`
-          : 'Brasil';
-        const dev = getClientDeviceInfo();
+    // Notificação em tempo real (Push no Celular & WhatsApp)
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const ipDisp = ip || (cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0');
+    const locDisp = cachedIpInfo && cachedIpInfo.cidade && cachedIpInfo.cidade !== 'N/A' 
+      ? `${cachedIpInfo.cidade}, ${cachedIpInfo.regiao || 'BR'}`
+      : 'Brasil';
+    const dev = getClientDeviceInfo();
 
-        const msg = `🚨 *SUBINOVA · NOVO ACESSO*\n` +
-          `━━━━━━━━━━━━━━━━━━━━\n` +
-          `👤 *Destinatário:* ${rotulo || 'SUBINOVA'}\n` +
-          `🔑 *Chave:* ${lastAttemptedKey || 'Link de 1-Clique'}\n` +
-          `📍 *Local:* ${locDisp}\n` +
-          `🌐 *IP:* ${ipDisp}\n` +
-          `💻 *Dispositivo:* ${dev.os} · ${dev.browser}\n` +
-          `⏱️ *Sessão:* ${sessaoIlimitada ? '👑 Ilimitada (Chefia)' : '5 minutos'}\n` +
-          `📅 *Horário:* ${dateStr}\n` +
-          `━━━━━━━━━━━━━━━━━━━━\n` +
-          `Status: ✅ Liberado com Sucesso`;
-
-        sendWhatsAppAlert(msg);
-      }
-    };
-
-    if (!cachedPortalStatus) {
-      KeyStore.fetchPortalStatus().then(st => {
-        cachedPortalStatus = st;
-        dispatchSuccessWpp();
-      }).catch(() => {});
-    } else {
-      dispatchSuccessWpp();
-    }
+    sendAlertNotification(
+      `Novo Acesso: ${rotulo || 'SUBINOVA'}`,
+      `👤 Destinatário: ${rotulo || 'SUBINOVA'}\n🔑 Chave: ${lastAttemptedKey || 'Link de 1-Clique'}\n📍 Local: ${locDisp}\n🌐 IP: ${ipDisp}\n💻 Dispositivo: ${dev.os} · ${dev.browser}\n⏱️ Sessão: ${sessaoIlimitada ? '👑 Ilimitada (Chefia)' : '5 minutos'}\n📅 Horário: ${dateStr}\nStatus: Liberado com Sucesso ✅`,
+      'white_check_mark,lock,tada',
+      'high'
+    );
 
     // Inicia temporizador inteligente de sessão
     setupSessionTimer(sessaoIlimitada);
@@ -739,29 +725,15 @@
       securityAlertModal.classList.remove('hidden');
     }
 
-    // Alerta de segurança no WhatsApp
-    const dispatchDevToolsWpp = () => {
-      if (cachedPortalStatus && cachedPortalStatus.whatsapp_notificar_devtools) {
-        const ipDisp = cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0';
-        const dev = getClientDeviceInfo();
-        const msg = `🚨 *SUBINOVA · ALERTA DE SEGURANÇA*\n` +
-          `━━━━━━━━━━━━━━━━━━━━\n` +
-          `⚠️ *Tentativa de Inspeção de Código (F12 / DevTools)!*\n` +
-          `🌐 *IP:* ${ipDisp}\n` +
-          `💻 *Dispositivo:* ${dev.os} · ${dev.browser}\n` +
-          `🔒 O painel Power BI foi descarregado instantaneamente.`;
-        sendWhatsAppAlert(msg);
-      }
-    };
-
-    if (!cachedPortalStatus) {
-      KeyStore.fetchPortalStatus().then(st => {
-        cachedPortalStatus = st;
-        dispatchDevToolsWpp();
-      }).catch(() => {});
-    } else {
-      dispatchDevToolsWpp();
-    }
+    // Alerta de violação de segurança imediato no celular
+    const ipDisp = cachedIpInfo ? cachedIpInfo.ip : '0.0.0.0';
+    const dev = getClientDeviceInfo();
+    sendAlertNotification(
+      `🚨 VIOLAÇÃO: Inspeção F12 / DevTools`,
+      `Alguém tentou inspecionar o código do portal!\nIP: ${ipDisp}\nDispositivo: ${dev.os} · ${dev.browser}\nO Power BI foi imediatamente descarregado.`,
+      'rotating_light,skull',
+      'urgent'
+    );
   }
 
   if (btnSecurityReload) {

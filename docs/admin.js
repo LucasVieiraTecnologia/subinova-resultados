@@ -1205,6 +1205,34 @@
     });
   }
 
+  const btnTestNtfy = document.getElementById('btn-test-ntfy');
+  if (btnTestNtfy) {
+    btnTestNtfy.addEventListener('click', async () => {
+      try {
+        btnTestNtfy.disabled = true;
+        btnTestNtfy.textContent = 'Enviando...';
+        await fetch('https://ntfy.sh/subinova-lucas-7184', {
+          method: 'POST',
+          headers: {
+            'Title': '🚨 SUBINOVA · TESTE DE ALERTA',
+            'Priority': 'high',
+            'Tags': 'bell,white_check_mark'
+          },
+          body: 'Notificação de teste executada com sucesso a partir do Painel ADM!'
+        });
+        btnTestNtfy.textContent = '✅ Notificação Enviada!';
+        setTimeout(() => {
+          btnTestNtfy.disabled = false;
+          btnTestNtfy.textContent = '🧪 Testar Alerta no Celular Agora';
+        }, 2200);
+      } catch (e) {
+        alert('Erro ao testar: ' + e.message);
+        btnTestNtfy.disabled = false;
+        btnTestNtfy.textContent = '🧪 Testar Alerta no Celular Agora';
+      }
+    });
+  }
+
   /* ==========================================================================
      GERENCIAMENTO DE MODAIS
      ========================================================================== */
