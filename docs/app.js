@@ -761,6 +761,15 @@
       return;
     }
 
+    // F11 (Tela Cheia nativa) ou Escape (Sair da Tela Cheia)
+    if (e.key === 'F11' || e.key === 'Escape') {
+      fullscreenGraceUntil = Date.now() + 2500;
+      setTimeout(() => {
+        initialDiffW = Math.max(0, window.outerWidth - window.innerWidth);
+        initialDiffH = Math.max(0, window.outerHeight - window.innerHeight);
+      }, 600);
+    }
+
     // F12
     if (e.key === 'F12' || e.keyCode === 123) {
       e.preventDefault();
@@ -798,28 +807,51 @@
     }
   });
 
-  let initialDiffW = Math.abs(window.outerWidth - window.innerWidth);
-  let initialDiffH = Math.abs(window.outerHeight - window.innerHeight);
+  let initialDiffW = Math.max(0, window.outerWidth - window.innerWidth);
+  let initialDiffH = Math.max(0, window.outerHeight - window.innerHeight);
+  let fullscreenGraceUntil = 0;
 
   setInterval(() => {
     if (isDevToolsTriggered) return;
+
+    // Ignora oscilações de layout/GPU durante transição de Tela Cheia (entrar ou sair)
+    if (Date.now() < fullscreenGraceUntil) {
+      initialDiffW = Math.max(0, window.outerWidth - window.innerWidth);
+      initialDiffH = Math.max(0, window.outerHeight - window.innerHeight);
+      return;
+    }
 
     // Técnica A: Avaliação do console pelo inspetor
     console.dir(devtoolsObj);
 
     // Técnica B: Variação de tamanho da janela (Detecção de DevTools acoplado)
-    const curDiffW = Math.abs(window.outerWidth - window.innerWidth);
-    const curDiffH = Math.abs(window.outerHeight - window.innerHeight);
-    if (Math.abs(curDiffW - initialDiffW) > 85 || Math.abs(curDiffH - initialDiffH) > 85) {
-      triggerSecurityLockout();
-      return;
+    // Em Tela Cheia a diferença cai para ~0 (redução legítima); DevTools acoplado aumenta a diferença (>200px)
+    const curDiffW = Math.max(0, window.outerWidth - window.innerWidth);
+    const curDiffH = Math.max(0, window.outerHeight - window.innerHeight);
+
+    if (document.fullscreenElement) {
+      if (curDiffW > 200 || curDiffH > 200) {
+        triggerSecurityLockout();
+        return;
+      }
+    } else {
+      if (curDiffW < initialDiffW) initialDiffW = curDiffW;
+      if (curDiffH < initialDiffH) initialDiffH = curDiffH;
+
+      const deltaW = curDiffW - initialDiffW;
+      const deltaH = curDiffH - initialDiffH;
+
+      if ((curDiffW > 200 && deltaW > 160) || (curDiffH > 240 && deltaH > 160)) {
+        triggerSecurityLockout();
+        return;
+      }
     }
 
     // Técnica C: Verificação de atraso / parada no debugger
     const t0 = performance.now();
     debugger;
     const t1 = performance.now();
-    if (t1 - t0 > 80) {
+    if (t1 - t0 > 120) {
       triggerSecurityLockout();
     }
   }, 400);
@@ -920,7 +952,9 @@
 
   const btnFullscreenToggle = document.getElementById('btn-fullscreen-toggle');
   if (btnFullscreenToggle) {
-    btnFullscreenToggle.addEventListener('click', () => {
+    btnFullscreenToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fullscreenGraceUntil = Date.now() + 2500;
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(() => {});
         const span = btnFullscreenToggle.querySelector('span');
@@ -935,9 +969,14 @@
     });
 
     document.addEventListener('fullscreenchange', () => {
+      fullscreenGraceUntil = Date.now() + 2500;
+      setTimeout(() => {
+        initialDiffW = Math.max(0, window.outerWidth - window.innerWidth);
+        initialDiffH = Math.max(0, window.outerHeight - window.innerHeight);
+      }, 600);
       const span = btnFullscreenToggle.querySelector('span');
-      if (!document.fullscreenElement && span) {
-        span.textContent = 'Tela Cheia';
+      if (span) {
+        span.textContent = document.fullscreenElement ? 'Sair da Tela Cheia' : 'Tela Cheia';
       }
     });
   }
