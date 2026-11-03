@@ -1213,7 +1213,7 @@
       btnBackupDb.innerHTML = '<span>⏳ Gerando...</span>';
       try {
         const [dashState, logs] = await Promise.all([
-          Storage.fetchDashboardState(),
+          Storage.fetchAdminBundle(),
           Storage.fetchLogs()
         ]);
         const backupPayload = {
