@@ -428,7 +428,7 @@
     }
 
     // 1. Envio Direto via NTFY Push (Celular / Desktop em 0.1s)
-    const topic = (cachedPortalStatus && cachedPortalStatus.ntfy_topic) || 'subinova-lucas-7184';
+    const topic = (cachedPortalStatus && cachedPortalStatus.ntfy_topic) || atob('c3ViaW5vdmEtbHVjYXMtNzE4NA==');
     try {
       fetch(`https://ntfy.sh/${topic}`, {
         method: 'POST',

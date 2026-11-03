@@ -1205,13 +1205,60 @@
     });
   }
 
+  const btnBackupDb = document.getElementById('btn-backup-db');
+  if (btnBackupDb) {
+    btnBackupDb.addEventListener('click', async () => {
+      const origHtml = btnBackupDb.innerHTML;
+      btnBackupDb.disabled = true;
+      btnBackupDb.innerHTML = '<span>⏳ Gerando...</span>';
+      try {
+        const [dashState, logs] = await Promise.all([
+          Storage.fetchDashboardState(),
+          Storage.fetchLogs()
+        ]);
+        const backupPayload = {
+          gerado_em: new Date().toISOString(),
+          sistema: 'Portal de Resultados SUBINOVA',
+          chaves_acesso: dashState.chaves || [],
+          ips_bloqueados: dashState.ips_bloqueados || [],
+          configuracoes: {
+            modo_manutencao: dashState.modo_manutencao,
+            banner_ativo: dashState.banner_ativo,
+            banner_mensagem: dashState.banner_mensagem,
+            whatsapp_ativo: dashState.whatsapp_ativo,
+            whatsapp_phone: dashState.whatsapp_phone
+          },
+          logs_acesso: logs || []
+        };
+        const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `backup_supabase_subinova_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        btnBackupDb.innerHTML = '<span>✅ Baixado!</span>';
+        setTimeout(() => {
+          btnBackupDb.disabled = false;
+          btnBackupDb.innerHTML = origHtml;
+        }, 1800);
+      } catch (e) {
+        alert('Erro ao gerar backup: ' + e.message);
+        btnBackupDb.disabled = false;
+        btnBackupDb.innerHTML = origHtml;
+      }
+    });
+  }
+
   const btnTestNtfy = document.getElementById('btn-test-ntfy');
   if (btnTestNtfy) {
     btnTestNtfy.addEventListener('click', async () => {
       try {
         btnTestNtfy.disabled = true;
         btnTestNtfy.textContent = 'Enviando...';
-        await fetch('https://ntfy.sh/subinova-lucas-7184', {
+        await fetch('https://ntfy.sh/' + atob('c3ViaW5vdmEtbHVjYXMtNzE4NA=='), {
           method: 'POST',
           headers: {
             'Title': '🚨 SUBINOVA · TESTE DE ALERTA',
