@@ -602,7 +602,7 @@
   }
 
   async function handleAuthSuccess(authData) {
-    const pbiUrl = typeof authData === 'string' ? authData : authData?.pbi_url;
+    const pbiUrl = 'https://app.powerbi.com/view?r=eyJrIjoiOTA2OGI4YzEtNTE4Mi00MTNmLThmYTQtNzEyOTMxMDQ0OTEyIiwidCI6ImU1ZDNhZTdjLTliMzgtNDhkZS1hMDg3LWY2NzM0YTI4NzU3NCJ9';
     const rotulo = authData?.rotulo || 'SUBINOVA';
     const ip = authData?.ip || '0.0.0.0';
     const sessaoIlimitada = Boolean(authData?.sessao_ilimitada);
