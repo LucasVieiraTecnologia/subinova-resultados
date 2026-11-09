@@ -132,6 +132,10 @@
 
     async callRpc(fnName, payload) {
       const cfg = this.getCloudConfig();
+      // Distingue a assinatura atual da versão antiga com parâmetros opcionais.
+      if (fnName === 'admin_salvar_configuracoes' && !('p_whatsapp_ativo' in payload)) {
+        payload = { ...payload, p_whatsapp_ativo: null };
+      }
       const res = await fetch(`${cfg.url}/rest/v1/rpc/${fnName}`, {
         method: 'POST',
         headers: {
