@@ -13,6 +13,8 @@
   const authModal = document.getElementById('auth-modal');
   const authBanner = document.getElementById('auth-banner');
   const authBannerText = document.getElementById('auth-banner-text');
+  const maintenanceNotice = document.getElementById('maintenance-notice');
+  const maintenanceMessage = document.getElementById('maintenance-message');
   const authForm = document.getElementById('auth-form');
   const passwordInput = document.getElementById('password-input');
   const btnToggleEye = document.getElementById('btn-toggle-eye');
@@ -331,6 +333,9 @@
       }
 
       // Modo estritamente local (quando não há nuvem configurada)
+      if (localStorage.getItem('subinova_modo_manutencao') === 'true') {
+        return { ok: false, error: 'Painel em manutenção temporária. Tente mais tarde.' };
+      }
       const raw = localStorage.getItem(LOCAL_STORAGE_KEYS);
       const keys = raw ? JSON.parse(raw) : [];
       const match = keys.find(k => k.chave_hash === hash || k.chave === clean);
@@ -358,8 +363,29 @@
   /* ==========================================================================
      ABERTURA DO MODAL DE AUTENTICAÇÃO
      ========================================================================== */
-  async function showAuthModal() {
-    if (modalOpened) return;
+  function renderPortalStatus(status) {
+    const isMaintenance = Boolean(status.modo_manutencao);
+    authCard.classList.toggle('maintenance-active', isMaintenance);
+    maintenanceNotice.classList.toggle('hidden', !isMaintenance);
+    maintenanceMessage.textContent = status.mensagem_manutencao || 'Painel temporariamente indisponível para atualização.';
+    authBanner.classList.toggle('hidden', isMaintenance || !status.banner_ativo || !status.banner_mensagem);
+    if (!isMaintenance) authBannerText.textContent = status.banner_mensagem || '';
+    if (isMaintenance && pbiIframe && pbiIframe.src !== 'about:blank') {
+      pbiIframe.src = 'about:blank';
+      pbiLayer.classList.remove('active');
+    }
+    return isMaintenance;
+  }
+
+  async function showAuthModal(portalStatus) {
+    if (!portalStatus || typeof portalStatus.modo_manutencao !== 'boolean') portalStatus = null;
+    if (modalOpened && !portalStatus) return;
+    if (modalOpened) {
+      renderPortalStatus(portalStatus);
+      authModal.style.opacity = '1';
+      authModal.classList.remove('hidden');
+      return;
+    }
     modalOpened = true;
 
     if (btnSkipVideo) {
@@ -371,15 +397,11 @@
       try { bgVideo.pause(); } catch (e) {}
     }
 
-    try {
-      const status = await KeyStore.fetchPortalStatus();
-      if (status.banner_ativo && status.banner_mensagem && authBanner && authBannerText) {
-        authBannerText.textContent = status.banner_mensagem;
-        authBanner.classList.remove('hidden');
-      }
-    } catch (e) {}
+    const status = portalStatus || await KeyStore.fetchPortalStatus();
+    const isMaintenance = renderPortalStatus(status);
 
     authModal.classList.remove('hidden');
+    if (isMaintenance) return;
     passwordInput.value = '';
     authError.classList.remove('visible');
 
@@ -985,6 +1007,15 @@
      STARTUP & LINK DE 1 CLIQUE
      ========================================================================== */
   window.addEventListener('DOMContentLoaded', () => {
+    const refreshMaintenanceStatus = () => {
+      KeyStore.fetchPortalStatus().then((status) => {
+        if (status.modo_manutencao || authCard.classList.contains('maintenance-active')) {
+          showAuthModal(status);
+        }
+      }).catch(() => {});
+    };
+    refreshMaintenanceStatus();
+    setInterval(refreshMaintenanceStatus, 10000);
     const urlParams = new URLSearchParams(window.location.search);
     const directKey = urlParams.get('k');
 

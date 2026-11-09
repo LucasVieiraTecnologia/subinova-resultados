@@ -244,6 +244,28 @@ button {
   display: none !important;
 }
 
+.maintenance-notice {
+  padding: 20px 0;
+  text-align: center;
+}
+
+.maintenance-notice h1 {
+  color: #fbbf24;
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+
+.maintenance-notice p {
+  color: var(--text-muted);
+}
+
+.auth-card.maintenance-active .auth-badge,
+.auth-card.maintenance-active .auth-header,
+.auth-card.maintenance-active #auth-form,
+.auth-card.maintenance-active .security-tag {
+  display: none;
+}
+
 .auth-header h1 {
   font-size: 21px;
   font-weight: 800;

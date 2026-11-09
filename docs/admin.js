@@ -290,10 +290,13 @@
 
     async setMaintenanceMode(val) {
       if (this.isCloudEnabled()) {
-        await this.callRpc('admin_salvar_configuracoes', {
+        const res = await this.callRpc('admin_salvar_configuracoes', {
           p_admin_hash: this.getAdminToken(),
           p_modo_manutencao: Boolean(val)
         });
+        if (!res || !res.ok) {
+          throw new Error((res && res.error) || 'Erro ao salvar modo manutenção na nuvem.');
+        }
       }
       localStorage.setItem('subinova_modo_manutencao', String(val));
     },
@@ -750,8 +753,16 @@
 
   chkMaintenance.addEventListener('change', async () => {
     const isMaint = chkMaintenance.checked;
-    await Storage.setMaintenanceMode(isMaint);
-    renderDashboard();
+    chkMaintenance.disabled = true;
+    try {
+      await Storage.setMaintenanceMode(isMaint);
+      await renderDashboard();
+    } catch (e) {
+      chkMaintenance.checked = !isMaint;
+      alert('Erro ao alterar modo manutenção: ' + e.message);
+    } finally {
+      chkMaintenance.disabled = false;
+    }
   });
 
   /* ==========================================================================
